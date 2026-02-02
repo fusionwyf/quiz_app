@@ -1,0 +1,65 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.py[cod]
+*.pyo
+build/
+dist/
+wheels/
+*.egg-info
+pip-wheel-metadata/
+
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+env.bak/
+.pyenv/
+.python-version
+
+# IDEs / editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets / env
+.env
+.env.*
+.env.local
+
+# Testing / coverage
+.coverage
+.coverage.*
+.pytest_cache/
+
+# Mypy / cache
+.mypy_cache/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Python package metadata
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Misc
+*.swp

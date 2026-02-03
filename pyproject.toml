@@ -1,14 +1,19 @@
 [project]
 name = "quiz-app-uv"
 version = "0.1.0"
-description = "Add your description here"
+description = "一个功能完整的在线答题系统后端API"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "datetime>=6.0",
     "fastapi>=0.128.0",
+    "httpx>=0.28.1",
+    "pytest>=9.0.2",
     "sqlmodel>=0.0.31",
-    "standard>=1.0.3",
-    "streamlit>=1.53.0",
     "uvicorn>=0.40.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "httpx>=0.24.0",
 ]

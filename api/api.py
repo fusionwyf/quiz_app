@@ -2,8 +2,9 @@
 from datetime import datetime, UTC
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from sqlmodel import Session, select, func
@@ -352,10 +353,20 @@ def finish_session(
     total_score_obtained = 0.0
     max_possible_score = 0.0
 
+    if qs.question_ids:
+        questions = session_db.exec(
+            select(Question).where(Question.id.in_(qs.question_ids))
+        ).all()
+        # 构建查找表以优化后续记录匹配
+        question_map = {q.id: q for q in questions}
+        max_possible_score = sum(q.score for q in questions)
+    else:
+        question_map = {}
+
     for record in records:
-        question = session_db.get(Question, record.question_id)
-        if question:
-            max_possible_score += question.score
+        # 使用 map 查找题目，避免 N+1 查询问题
+        if record.question_id in question_map:
+            question = question_map[record.question_id]
             if record.is_correct:
                 total_score_obtained += question.score
 
@@ -586,10 +597,10 @@ def parse_txt_to_question(txt_content: str, bank_id: int) -> Question:
 
 
 @app.post("/banks/{bank_id}/import")
-def import_questions(
+async def import_questions(
     bank_id: int,
+    request: Request,
     format: str = "json",  # json 或 txt
-    file_content: str = None,
     session: Session = Depends(get_session),
 ):
     """
@@ -601,6 +612,11 @@ def import_questions(
     bank = session.get(QuestionBank, bank_id)
     if not bank:
         raise HTTPException(404, f"QuestionBank with id {bank_id} not found")
+    try:
+        body_bytes = await request.body()
+        file_content = body_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(400, "Invalid UTF-8 encoding")
 
     if not file_content:
         raise HTTPException(400, "file_content is required")
@@ -723,7 +739,7 @@ def export_questions(
             txt_block += f"分数：{q.score}\n"
             txt_output.append(txt_block.strip())
 
-        return "\n\n".join(txt_output)
+        return PlainTextResponse("\n\n".join(txt_output))
 
     else:
         raise HTTPException(400, f"Unsupported format: {format}. Use 'json' or 'txt'")
@@ -903,7 +919,7 @@ def get_records(
         stmt = stmt.where(ExamRecord.is_correct == is_correct)
 
     # 获取总数
-    count_stmt = select(sqlmodel.func.count()).select_from(stmt.subquery())
+    count_stmt = select(func.count()).select_from(stmt.subquery())
     total = session_db.exec(count_stmt).first()
 
     # 获取分页数据

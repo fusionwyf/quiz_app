@@ -10,7 +10,7 @@
 - **做题Session**：顺序/随机做题模式，自动判题
 - **错题本系统**：自动记录错题，支持手动标记/取消
 - **学习统计**：题目错误率、答题准确率、得分统计
-- **数据导入导出**：支持JSON/TXT格式批量导入导出
+- **数据导入导出**：支持JSON/TXT格式批量导入导出，文件上传导入支持 txt/Word/Markdown（兼容键值格式与通用试卷格式）
 - **RESTful API**：完整的API文档，支持CORS
 
 ## 📋 技术栈
@@ -59,7 +59,7 @@ uv run uvicorn api:app --reload --host 0.0.0.0 --port 8000
 | 做题Session | `POST /session/start`, `GET /session/{id}/current`, `POST /session/{id}/answer` | 顺序/随机做题，自动判题 |
 | Session增强 | `GET /session/{id}/status`, `POST /session/{id}/finish` | 进度统计、手动结束 |
 | 错题本 | `GET /records/mistakes`, `POST /mistakes/mark`, `DELETE /mistakes/{id}` | 错题记录与管理 |
-| 数据导入导出 | `POST /banks/{id}/import`, `GET /banks/{id}/export` | JSON/TXT格式支持 |
+| 数据导入导出 | `POST /banks/{id}/import`, `POST /banks/{id}/import/file`, `GET /banks/{id}/export` | JSON/TXT字符串导入、txt/md/docx文件上传导入、JSON/TXT导出 |
 | 统计报表 | `GET /records`, `GET /stats/questions/{id}` | 答题记录、题目统计 |
 
 ## 🗄️ 数据模型
@@ -77,8 +77,11 @@ uv run uvicorn api:app --reload --host 0.0.0.0 --port 8000
 ### 项目结构
 ```
 quiz_app_uv/
-├── api.py              # FastAPI应用和所有接口
-├── models.py           # 数据模型和数据库配置
+├── api/
+│   ├── api.py          # FastAPI应用和所有接口
+│   ├── models.py       # 数据模型和数据库配置
+│   └── parsers.py      # 题库文件解析（txt/md/docx，键值+试卷双格式）
+├── tests/              # 单元测试
 ├── API.md              # 详细API文档
 ├── README.md           # 项目说明
 ├── pyproject.toml      # 项目配置

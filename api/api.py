@@ -2,7 +2,7 @@
 from datetime import datetime, UTC
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -18,6 +18,7 @@ from api.models import (
     QuizSession,
     Mistake,
 )
+from api.parsers import extract_text, parse_questions, parse_keyvalue_block
 
 app = FastAPI(title="Quiz App API", version="2.0")
 
@@ -528,74 +529,6 @@ def delete_question(
 # ======================================================
 
 
-def parse_txt_to_question(txt_content: str, bank_id: int) -> Question:
-    """
-    解析简单TXT格式为Question对象
-    格式示例：
-    题目：1+1=?
-    类型：single
-    选项：{"A": "1", "B": "2"}
-    答案：["B"]
-    分数：1.0
-    """
-    lines = txt_content.strip().split("\n")
-    data = {}
-
-    for line in lines:
-        line = line.strip()
-        if "：" in line:  # 中文冒号
-            key, value = line.split("：", 1)
-        elif ":" in line:  # 英文冒号
-            key, value = line.split(":", 1)
-        else:
-            continue
-
-        key = key.strip()
-        value = value.strip()
-
-        if key == "题目":
-            data["content"] = value
-        elif key == "类型":
-            data["type"] = value
-        elif key == "选项":
-            import json
-
-            try:
-                data["options"] = json.loads(value)
-            except json.JSONDecodeError:
-                raise ValueError(f"Invalid JSON in options: {value}")
-        elif key == "答案":
-            import json
-
-            try:
-                data["answer"] = json.loads(value)
-            except json.JSONDecodeError:
-                raise ValueError(f"Invalid JSON in answer: {value}")
-        elif key == "分数":
-            try:
-                data["score"] = float(value)
-            except ValueError:
-                raise ValueError(f"Invalid score: {value}")
-
-    # 必填字段检查
-    required_fields = ["content", "type"]
-    for field in required_fields:
-        if field not in data:
-            raise ValueError(f"Missing required field: {field}")
-
-    # 创建Question对象
-    question = Question(
-        bank_id=bank_id,
-        type=data.get("type"),
-        content=data.get("content"),
-        options=data.get("options"),
-        answer=data.get("answer"),
-        score=data.get("score", 1.0),
-    )
-
-    return question
-
-
 @app.post("/banks/{bank_id}/import")
 async def import_questions(
     bank_id: int,
@@ -659,10 +592,10 @@ async def import_questions(
             if not block.strip():
                 continue
             try:
-                question = parse_txt_to_question(block, bank_id)
+                question = parse_keyvalue_block(block, bank_id)
                 session.add(question)
                 imported_count += 1
-            except ValueError as e:
+            except ValueError:
                 # 跳过解析错误的题目，继续导入其他题目
                 continue
 
@@ -743,6 +676,61 @@ def export_questions(
 
     else:
         raise HTTPException(400, f"Unsupported format: {format}. Use 'json' or 'txt'")
+
+
+# ===== 文件上传导入（txt / md / docx）=====
+
+# 最大导入文件大小（10MB）
+MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024
+# 响应中返回的最大错误明细条数
+MAX_REPORTED_ERRORS = 50
+
+
+@app.post("/banks/{bank_id}/import/file")
+async def import_questions_file(
+    bank_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+):
+    """
+    通过文件上传导入题目到指定题库
+    - 支持 .txt / .md / .docx，按扩展名自动识别格式
+    - 文本内容兼容键值格式与通用试卷格式（自动探测）
+    - 解析失败的题目跳过，错误明细随响应返回
+    """
+    # 检查题库是否存在
+    bank = session.get(QuestionBank, bank_id)
+    if not bank:
+        raise HTTPException(404, f"QuestionBank with id {bank_id} not found")
+
+    data = await file.read()
+    if len(data) > MAX_IMPORT_FILE_SIZE:
+        raise HTTPException(413, "File too large (max 10MB)")
+
+    try:
+        text = extract_text(file.filename or "", data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    if not text.strip():
+        raise HTTPException(400, "File content is empty")
+
+    questions, errors = parse_questions(text, bank_id)
+
+    for question in questions:
+        session.add(question)
+    session.commit()
+
+    truncated = len(errors) > MAX_REPORTED_ERRORS
+    reported_errors = errors[:MAX_REPORTED_ERRORS]
+
+    return {
+        "message": f"Successfully imported {len(questions)} questions to bank {bank_id}",
+        "imported_count": len(questions),
+        "skipped_count": len(errors),
+        "errors": reported_errors,
+        "truncated": truncated,
+    }
 
 
 # ======================================================

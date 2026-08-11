@@ -1,4 +1,5 @@
 # api.py
+from contextlib import asynccontextmanager
 from datetime import datetime, UTC
 from typing import List, Optional
 
@@ -17,10 +18,19 @@ from api.models import (
     QuestionBank,
     QuizSession,
     Mistake,
+    create_db_and_tables,
 )
 from api.parsers import extract_text, parse_questions, parse_keyvalue_block
 
-app = FastAPI(title="Quiz App API", version="2.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时自动建表（已存在则跳过）
+    create_db_and_tables()
+    yield
+
+
+app = FastAPI(title="Quiz App API", version="2.0", lifespan=lifespan)
 
 # ===== CORS（给 React / Tauri 用）=====
 app.add_middleware(

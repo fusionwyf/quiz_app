@@ -21,6 +21,7 @@ from api.models import (
     create_db_and_tables,
 )
 from api.parsers import extract_text, parse_questions, parse_keyvalue_block
+from api import llm
 
 
 @asynccontextmanager
@@ -727,6 +728,19 @@ async def import_questions_file(
 
     questions, errors = parse_questions(text, bank_id)
 
+    # LLM 智能整理兜底：解析出 0 题且 LLM 已启用时，整理后重新解析
+    ai_normalized = False
+    if not questions and llm.get_llm_status()["enabled"]:
+        try:
+            normalized = llm.normalize_quiz_text(text)
+            ai_questions, ai_errors = parse_questions(normalized, bank_id)
+            if ai_questions:
+                questions, errors = ai_questions, ai_errors
+                ai_normalized = True
+        except Exception:
+            # 兜底失败（LLM 不可用 / 整理后仍无法解析）保留原结果
+            pass
+
     for question in questions:
         session.add(question)
     session.commit()
@@ -740,7 +754,16 @@ async def import_questions_file(
         "skipped_count": len(errors),
         "errors": reported_errors,
         "truncated": truncated,
+        "ai_normalized": ai_normalized,
     }
+
+
+@app.get("/llm/status")
+def llm_status():
+    """
+    查询 LLM 智能整理配置状态（供前端导入弹窗展示提示）
+    """
+    return llm.get_llm_status()
 
 
 # ======================================================

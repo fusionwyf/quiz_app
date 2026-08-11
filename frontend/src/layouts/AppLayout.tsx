@@ -1,0 +1,79 @@
+// 侧边菜单布局
+import { useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Layout, Menu } from 'antd';
+import {
+  BookOutlined,
+  DatabaseOutlined,
+  EditOutlined,
+  FileTextOutlined,
+} from '@ant-design/icons';
+
+const { Sider, Content, Header } = Layout;
+
+const menuItems = [
+  { key: '/', icon: <DatabaseOutlined />, label: '题库管理' },
+  { key: '/quiz/start', icon: <EditOutlined />, label: '开始做题' },
+  { key: '/mistakes', icon: <BookOutlined />, label: '错题本' },
+  { key: '/records', icon: <FileTextOutlined />, label: '答题记录' },
+];
+
+export default function AppLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(false);
+
+  // 子路由高亮父级菜单（做题相关页面统一高亮“开始做题”）
+  const selectedKey = location.pathname.startsWith('/quiz')
+    ? '/quiz/start'
+    : menuItems.find(
+        (item) =>
+          item.key !== '/' && location.pathname.startsWith(item.key),
+      )?.key ?? '/';
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        theme="dark"
+      >
+        <div
+          style={{
+            color: '#fff',
+            textAlign: 'center',
+            fontSize: collapsed ? 16 : 18,
+            fontWeight: 600,
+            padding: '16px 8px',
+          }}
+        >
+          {collapsed ? 'Q' : 'Quiz App'}
+        </div>
+        <Menu
+          theme="dark"
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={menuItems}
+          onClick={({ key }) => navigate(key)}
+        />
+      </Sider>
+      <Layout>
+        <Header
+          style={{
+            background: '#fff',
+            padding: '0 24px',
+            fontSize: 16,
+            fontWeight: 500,
+            borderBottom: '1px solid #f0f0f0',
+          }}
+        >
+          在线答题系统
+        </Header>
+        <Content style={{ padding: 24, overflow: 'auto' }}>
+          <Outlet />
+        </Content>
+      </Layout>
+    </Layout>
+  );
+}

@@ -55,6 +55,9 @@ Thumbs.db
 logs/
 npm-debug.log*
 
+# Node / frontend
+node_modules/
+
 # Python package metadata
 *.egg
 *.egg-info/

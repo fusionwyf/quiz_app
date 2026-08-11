@@ -158,9 +158,10 @@
   - 请求格式：`multipart/form-data`，字段 `file`（上传文件）
   - 支持扩展名：`.txt` / `.md`（`.markdown`）/ `.docx`，按扩展名自动识别格式
   - 限制：单文件最大 10MB；文本编码支持 UTF-8（自动回退 GBK）
-  - 返回：`{"message": str, "imported_count": int, "skipped_count": int, "errors": [str], "truncated": bool}`
+  - 返回：`{"message": str, "imported_count": int, "skipped_count": int, "errors": [str], "truncated": bool, "ai_normalized": bool}`
   - 错误：题库不存在 404；不支持的扩展名/无法解码/空内容 400；超过大小限制 413
   - 说明：文本内容自动探测两种题目格式，解析失败的题目跳过并在 `errors` 中给出原因（最多 50 条）
+  - AI 兜底：解析出 0 题且 LLM 已启用（见 `GET /llm/status`）时，自动调用 LLM 将原文整理成键值格式后重新解析；`ai_normalized=true` 表示本次导入经过 AI 整理。LLM 未启用/调用失败/整理后仍 0 题时保持原结果不变
 
   **格式一：键值格式**（与 `/import` 的 txt 格式一致）：
   ```
@@ -235,6 +236,15 @@
   - 路径：`/stats/questions/{question_id}`
   - 返回：`QuestionStats`（包含总尝试次数、正确次数、错误率、平均得分等）
   - 错误：题目不存在返回 404
+
+### 13) LLM 智能整理（可选）
+- **获取 LLM 配置状态**
+  - 方法：GET
+  - 路径：`/llm/status`
+  - 返回：`{"provider": str, "enabled": bool, "model": str}`
+    - `provider`：`none`（默认，未配置）/ `openai`（任意 OpenAI 兼容端点）/ `local`（llama-cpp-python 内嵌 GGUF）
+    - `enabled`：`provider` 非 `none` 时为 `true`
+  - 说明：供前端导入弹窗展示"已启用 AI 智能整理"提示使用
 
 ---
 

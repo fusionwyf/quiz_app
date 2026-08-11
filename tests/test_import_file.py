@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 import api.api as api_module
+import api.llm as llm
 import api.parsers as parsers
 from api.models import Question, QuestionBank
 from api.parsers import (
@@ -298,6 +299,119 @@ def test_import_file_too_large(
 
     response = upload(client, bank.id, "a.txt", b"x" * 20)
     assert response.status_code == 413
+
+
+# ======================================================
+# LLM 智能整理兜底测试
+# ======================================================
+
+
+UNPARSEABLE_TXT = "这是一段完全不像题目的文字\n没有任何编号和选项"
+
+
+def test_import_file_llm_fallback_success(
+    client: TestClient, session: Session, monkeypatch
+):
+    """解析出 0 题且 LLM 启用：兜底整理后导入成功，ai_normalized=true"""
+    bank = create_test_bank(session)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setattr(llm, "normalize_quiz_text", lambda text: KEYVALUE_TXT)
+
+    response = upload(client, bank.id, "messy.txt", UNPARSEABLE_TXT.encode("utf-8"))
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 2
+    assert data["ai_normalized"] is True
+
+    questions = session.exec(
+        select(Question).where(Question.bank_id == bank.id)
+    ).all()
+    assert len(questions) == 2
+
+
+def test_import_file_llm_disabled_no_fallback(
+    client: TestClient, session: Session, monkeypatch
+):
+    """LLM 未启用（默认）：不触发兜底，原行为不变"""
+    bank = create_test_bank(session)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    response = upload(client, bank.id, "messy.txt", UNPARSEABLE_TXT.encode("utf-8"))
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 0
+    assert data["ai_normalized"] is False
+
+
+def test_import_file_llm_not_triggered_when_parse_ok(
+    client: TestClient, session: Session, monkeypatch
+):
+    """正常解析成功时不调用 LLM（零开销）"""
+    bank = create_test_bank(session)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+
+    def fail_if_called(text):
+        raise AssertionError("解析成功时不应调用 LLM")
+
+    monkeypatch.setattr(llm, "normalize_quiz_text", fail_if_called)
+
+    response = upload(client, bank.id, "questions.txt", KEYVALUE_TXT.encode("utf-8"))
+    assert response.status_code == 200
+    assert response.json()["imported_count"] == 2
+    assert response.json()["ai_normalized"] is False
+
+
+def test_import_file_llm_error_falls_back(
+    client: TestClient, session: Session, monkeypatch
+):
+    """兜底调用异常：回退原结果（imported_count=0）"""
+    bank = create_test_bank(session)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+
+    def raise_error(text):
+        raise RuntimeError("LLM 连接失败")
+
+    monkeypatch.setattr(llm, "normalize_quiz_text", raise_error)
+
+    response = upload(client, bank.id, "messy.txt", UNPARSEABLE_TXT.encode("utf-8"))
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 0
+    assert data["ai_normalized"] is False
+
+
+def test_import_file_llm_normalize_still_zero(
+    client: TestClient, session: Session, monkeypatch
+):
+    """整理后仍无法解析：保留原结果，ai_normalized=false"""
+    bank = create_test_bank(session)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setattr(llm, "normalize_quiz_text", lambda text: "仍然不是题目格式")
+
+    response = upload(client, bank.id, "messy.txt", UNPARSEABLE_TXT.encode("utf-8"))
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 0
+    assert data["ai_normalized"] is False
+
+
+def test_llm_status_endpoint_default(client: TestClient, monkeypatch):
+    """GET /llm/status 默认返回未启用"""
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    response = client.get("/llm/status")
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
+
+
+def test_llm_status_endpoint_enabled(client: TestClient, monkeypatch):
+    """GET /llm/status 配置后返回启用状态"""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_MODEL", "qwen2.5:7b")
+    response = client.get("/llm/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["enabled"] is True
+    assert data["model"] == "qwen2.5:7b"
 
 
 # ======================================================

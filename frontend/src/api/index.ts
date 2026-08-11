@@ -1,0 +1,212 @@
+// 分模块的 API 函数：页面统一从这里调用，不直接使用 axios
+import { API_BASE, client } from './client';
+import type {
+  AnswerSubmission,
+  CheckResult,
+  CreateQuestionDTO,
+  ExportResult,
+  ImportResult,
+  LlmStatus,
+  MistakeItem,
+  PaginatedRecords,
+  Question,
+  QuestionBank,
+  QuestionDTO,
+  QuestionStats,
+  QuizSession,
+  SessionStatus,
+  SessionSummary,
+  UpdateQuestionDTO,
+} from './types';
+
+// ===== 题库管理 =====
+
+export async function listBanks(signal?: AbortSignal): Promise<QuestionBank[]> {
+  const { data } = await client.get<QuestionBank[]>('/banks', { signal });
+  return data;
+}
+
+export async function createBank(name: string): Promise<QuestionBank> {
+  const { data } = await client.post<QuestionBank>('/banks/create', null, {
+    params: { name },
+  });
+  return data;
+}
+
+// ===== 导入 / 导出 =====
+
+export async function importQuestionsFile(
+  bankId: number,
+  file: File,
+): Promise<ImportResult> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await client.post<ImportResult>(
+    `/banks/${bankId}/import/file`,
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return data;
+}
+
+/** 导出题库（返回完整题目数组，题目管理页复用为列表数据源；silent 时失败不弹提示） */
+export async function exportQuestions(
+  bankId: number,
+  options?: { silent?: boolean; signal?: AbortSignal },
+): Promise<ExportResult> {
+  const { data } = await client.get<ExportResult>(`/banks/${bankId}/export`, {
+    params: { format: 'json' },
+    silent: options?.silent,
+    signal: options?.signal,
+  });
+  return data;
+}
+
+/** 导出下载链接（json / txt） */
+export function exportUrl(bankId: number, format: 'json' | 'txt'): string {
+  return `${API_BASE}/banks/${bankId}/export?format=${format}`;
+}
+
+// ===== LLM 智能整理 =====
+
+export async function getLlmStatus(): Promise<LlmStatus> {
+  const { data } = await client.get<LlmStatus>('/llm/status', {
+    silent: true,
+  });
+  return data;
+}
+
+// ===== 题目 CRUD =====
+
+export async function createQuestion(
+  dto: CreateQuestionDTO,
+): Promise<QuestionDTO> {
+  const { data } = await client.post<QuestionDTO>('/questions', dto);
+  return data;
+}
+
+export async function getQuestion(id: number): Promise<QuestionDTO> {
+  const { data } = await client.get<QuestionDTO>(`/questions/${id}`);
+  return data;
+}
+
+export async function updateQuestion(
+  id: number,
+  dto: UpdateQuestionDTO,
+): Promise<QuestionDTO> {
+  const { data } = await client.put<QuestionDTO>(`/questions/${id}`, dto);
+  return data;
+}
+
+export async function deleteQuestion(id: number): Promise<void> {
+  await client.delete(`/questions/${id}`);
+}
+
+// ===== 做题 Session =====
+
+export async function startSession(
+  bankId: number,
+  mode: 'sequential' | 'random',
+): Promise<QuizSession> {
+  const { data } = await client.post<QuizSession>('/session/start', null, {
+    params: { bank_id: bankId, mode },
+  });
+  return data;
+}
+
+export async function getCurrentQuestion(
+  sessionId: number,
+): Promise<QuestionDTO> {
+  const { data } = await client.get<QuestionDTO>(
+    `/session/${sessionId}/current`,
+  );
+  return data;
+}
+
+export async function submitAnswer(
+  sessionId: number,
+  submission: AnswerSubmission,
+): Promise<CheckResult> {
+  const { data } = await client.post<CheckResult>(
+    `/session/${sessionId}/answer`,
+    submission,
+  );
+  return data;
+}
+
+export async function getSessionStatus(
+  sessionId: number,
+): Promise<SessionStatus> {
+  const { data } = await client.get<SessionStatus>(
+    `/session/${sessionId}/status`,
+  );
+  return data;
+}
+
+export async function finishSession(
+  sessionId: number,
+): Promise<SessionSummary> {
+  const { data } = await client.post<SessionSummary>(
+    `/session/${sessionId}/finish`,
+  );
+  return data;
+}
+
+// ===== 错题本 =====
+
+export async function getMistakeBook(
+  bankId?: number,
+  signal?: AbortSignal,
+): Promise<MistakeItem[]> {
+  const { data } = await client.get<{ mistakes: MistakeItem[] }>('/mistakes', {
+    params: bankId !== undefined ? { bank_id: bankId } : undefined,
+    signal,
+  });
+  return data.mistakes;
+}
+
+export async function markMistake(
+  questionId: number,
+  bankId: number,
+): Promise<void> {
+  await client.post('/mistakes/mark', {
+    question_id: questionId,
+    bank_id: bankId,
+  });
+}
+
+export async function unmarkMistake(questionId: number): Promise<void> {
+  await client.delete(`/mistakes/${questionId}`);
+}
+
+// ===== 答题记录与统计 =====
+
+export interface RecordsQuery {
+  page?: number;
+  page_size?: number;
+  question_id?: number;
+  session_id?: number;
+  is_correct?: boolean;
+}
+
+export async function getRecords(
+  query: RecordsQuery,
+  signal?: AbortSignal,
+): Promise<PaginatedRecords> {
+  const { data } = await client.get<PaginatedRecords>('/records', {
+    params: query,
+    signal,
+  });
+  return data;
+}
+
+export async function getQuestionStats(
+  questionId: number,
+): Promise<QuestionStats> {
+  const { data } = await client.get<QuestionStats>(
+    `/stats/questions/${questionId}`,
+  );
+  return data;
+}
+
+export type { Question };

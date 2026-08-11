@@ -11,6 +11,8 @@
 - **错题本系统**：自动记录错题，支持手动标记/取消
 - **学习统计**：题目错误率、答题准确率、得分统计
 - **数据导入导出**：支持JSON/TXT格式批量导入导出，文件上传导入支持 txt/Word/Markdown（兼容键值格式与通用试卷格式）
+- **AI 智能整理（可选）**：导入文件解析不出题目时，自动调用 LLM 将原文归一化后重新解析（默认关闭，见下文配置）
+- **React 前端**：内置 Web 前端（React + TypeScript + Ant Design），覆盖题库管理、文件导入、做题、错题本、统计全流程
 - **RESTful API**：完整的API文档，支持CORS
 
 ## 📋 技术栈
@@ -28,18 +30,80 @@
 uv add fastapi sqlmodel pydantic
 ```
 
-### 2. 初始化数据库
-```bash
-python models.py
-```
-
-### 3. 启动API服务器
+### 2. 启动API服务器
 ```bash
 uv run uvicorn api:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 4. 访问API文档
+> 数据库会在服务启动时自动创建（无需手动初始化）。
+
+### 3. 访问API文档
 打开浏览器访问：http://localhost:8000/docs
+
+## 🖥️ 前端（React + Vite + TypeScript + Ant Design）
+
+前端位于 `frontend/` 目录，与后端平级，功能覆盖：题库管理（创建/导入/导出）、题目 CRUD、顺序/随机做题（自动判题）、错题本、答题记录与题目统计。
+
+### 启动前端
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+打开浏览器访问：http://localhost:5173 （需后端已在 8000 端口运行；5173 已包含在后端 CORS 白名单中）
+
+### 前端目录结构
+```
+frontend/
+├── src/
+│   ├── api/                # API 封装层（types / client / index）
+│   ├── components/         # 共享组件（题目卡片/导入弹窗/题目表单）
+│   ├── pages/              # 页面（题库/题目/做题/错题本/记录）
+│   ├── layouts/            # 侧边菜单布局
+│   ├── App.tsx             # 路由定义
+│   └── main.tsx
+├── vite.config.ts          # 固定 5173 端口
+└── .env                    # VITE_API_BASE=http://localhost:8000
+```
+
+### 生产构建
+```bash
+cd frontend
+npm run build   # 产物输出到 frontend/dist
+```
+
+## 🤖 AI 智能整理（可选）
+
+导入题库文件时，若现有解析器识别不出任何题目，后端会自动调用 LLM 将原文整理成标准键值格式（`题目：/类型：/选项：JSON/答案：JSON`）后重新解析。默认关闭，通过环境变量启用；启用后导入接口响应会新增 `ai_normalized` 字段标记是否经过 AI 整理，前端导入弹窗也会展示启用状态。
+
+**方式一：Ollama 或其他 OpenAI 兼容端点（推荐，零新增依赖）**
+
+```bash
+# 以 Ollama 为例：先安装 Ollama 并拉取一个小模型
+ollama pull qwen2.5:3b
+
+# 启动后端时配置环境变量
+LLM_PROVIDER=openai uv run uvicorn api:app --reload --port 8000
+```
+
+`LLM_BASE_URL` 默认指向 `http://localhost:11434/v1`（Ollama 的 OpenAI 兼容地址），也可改成任意第三方 OpenAI 协议 API、llama.cpp server 或 LM Studio 的端点；`LLM_MODEL` 默认 `qwen2.5:3b`，`LLM_API_KEY` 可选。
+
+**方式二：llama-cpp-python 内嵌 GGUF 模型（进程内运行，无外部程序依赖）**
+
+```bash
+uv sync --extra llm        # 安装 llama-cpp-python
+
+LLM_PROVIDER=local LOCAL_LLM_MODEL_PATH=/path/to/model.gguf uv run uvicorn api:app --reload --port 8000
+```
+
+模型文件首次调用时才加载（懒加载）。此模式便于未来 Tauri 打包：Python 后端作为 sidecar + GGUF 模型文件随包分发。
+
+注意事项：
+- LLM 调用仅在解析结果为 0 题时触发，正常导入路径零开销；单次调用超时 120 秒
+- 送入模型的文本超过约 8000 字符会截断（小模型上下文有限）
+- LLM 输出仍会走现有解析器验证，整理失败自动回退原结果，不会产生脏数据
+- 可用 `GET /llm/status` 查看当前配置状态
 
 ## 📚 API文档
 
@@ -80,8 +144,10 @@ quiz_app_uv/
 ├── api/
 │   ├── api.py          # FastAPI应用和所有接口
 │   ├── models.py       # 数据模型和数据库配置
-│   └── parsers.py      # 题库文件解析（txt/md/docx，键值+试卷双格式）
-├── tests/              # 单元测试
+│   ├── parsers.py      # 题库文件解析（txt/md/docx，键值+试卷双格式）
+│   └── llm.py          # LLM 智能整理（可选，解析失败自动兜底）
+├── tests/              # 后端单元测试
+├── frontend/           # React 前端（见上文“前端”章节）
 ├── API.md              # 详细API文档
 ├── README.md           # 项目说明
 ├── pyproject.toml      # 项目配置

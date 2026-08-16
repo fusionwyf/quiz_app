@@ -147,9 +147,10 @@ export async function deleteQuestion(id: number): Promise<void> {
 export async function startSession(
   bankId: number,
   mode: 'sequential' | 'random',
+  source: 'normal' | 'mistake' = 'normal',
 ): Promise<QuizSession> {
   const { data } = await client.post<QuizSession>('/session/start', null, {
-    params: { bank_id: bankId, mode },
+    params: { bank_id: bankId, mode, source },
   });
   return data;
 }

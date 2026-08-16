@@ -90,9 +90,9 @@
 ### 4) 开始做题 Session
 - 方法：POST
 - 路径：`/session/start`
-- 参数：`bank_id: int`, `mode: str = "sequential"`（`sequential` 或 `random`）
-- 返回：`QuizSession` 对象
-- 错误：题库无题时返回 404（"No questions in bank"）
+- 参数：`bank_id: int`, `mode: str = "sequential"`（`sequential` 或 `random`，题序）, `source: str = "normal"`（`normal` 全部题目 / `mistake` 错题练习：题源为该库当前错题快照，按最近答错在前，`random` 时打乱）
+- 返回：`QuizSession` 对象（`source=mistake` 时 `mode` 记为 `mistake`）
+- 错误：题库无题 404（"No questions in bank"）；错题练习但库中无错题 404（"该题库暂无错题…"）；`source`/`mode` 非法 400
 
 ### 5) 获取当前题（Session）
 - 方法：GET

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from api.deps import get_session
-from api.models import Question, ExamRecord, QuizSession
+from api.models import Question, ExamRecord, QuizSession, Mistake
 from api.schemas import QuestionDTO
 from api.services.grading import check_answer
 from api.services import mistakes as mistake_service
@@ -84,21 +84,39 @@ def get_random_quiz(
 @router.post("/session/start")
 def start_session(
     bank_id: int,
-    mode: str = "sequential",  # sequential / random
+    mode: str = "sequential",  # sequential / random（题序）
+    source: str = "normal",  # normal（全部题目）/ mistake（错题本，CONTEXT.md「错题练习」）
     session: Session = Depends(get_session),
 ):
-    q_ids = session.exec(select(Question.id).where(Question.bank_id == bank_id)).all()
+    if source not in ("normal", "mistake"):
+        raise HTTPException(400, "source 仅支持 normal / mistake")
+    if mode not in ("sequential", "random"):
+        raise HTTPException(400, "mode 仅支持 sequential / random")
 
-    if not q_ids:
-        raise HTTPException(404, "No questions in bank")
+    if source == "mistake":
+        # 题源快照：开练时刻的错题列表，按最近答错在前；random 时打乱
+        ids = session.exec(
+            select(Mistake.question_id)
+            .where(Mistake.bank_id == bank_id)
+            .order_by(Mistake.last_wrong_at.desc())
+        ).all()
+        if not ids:
+            raise HTTPException(404, "该题库暂无错题，先去刷题积累错题吧")
+        stored_mode = "mistake"
+    else:
+        ids = session.exec(
+            select(Question.id).where(Question.bank_id == bank_id)
+        ).all()
+        if not ids:
+            raise HTTPException(404, "No questions in bank")
+        stored_mode = mode
 
-    ids = [i for i in q_ids]
     if mode == "random":
         random.shuffle(ids)
 
     qs = QuizSession(
         bank_id=bank_id,
-        mode=mode,
+        mode=stored_mode,
         question_ids=ids,
         total=len(ids),
     )

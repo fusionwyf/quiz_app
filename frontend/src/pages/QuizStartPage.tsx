@@ -1,4 +1,4 @@
-// 开始做题页：选择题库与模式（顺序/随机），创建 Session
+// 开始做题页：选择题库、题源（全部/错题）与题序（顺序/随机），创建 Session
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Form, Radio, Select, Space, Typography } from 'antd';
@@ -9,6 +9,7 @@ export default function QuizStartPage() {
   const navigate = useNavigate();
   const [banks, setBanks] = useState<QuestionBank[]>([]);
   const [bankId, setBankId] = useState<number | undefined>();
+  const [source, setSource] = useState<'normal' | 'mistake'>('normal');
   const [mode, setMode] = useState<'sequential' | 'random'>('sequential');
   const [starting, setStarting] = useState(false);
 
@@ -25,10 +26,10 @@ export default function QuizStartPage() {
     if (bankId === undefined) return;
     setStarting(true);
     try {
-      const session = await startSession(bankId, mode);
+      const session = await startSession(bankId, mode, source);
       navigate(`/quiz/session/${session.id}`);
     } catch {
-      // 错误提示已由拦截器处理（如题库无题返回 404）
+      // 错误提示已由拦截器处理（如题库无题/暂无错题返回 404）
     } finally {
       setStarting(false);
     }
@@ -48,6 +49,17 @@ export default function QuizStartPage() {
               onChange={setBankId}
               options={banks.map((b) => ({ value: b.id, label: b.name }))}
             />
+          </Form.Item>
+          <Form.Item label="练习来源">
+            <Radio.Group
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              optionType="button"
+              buttonStyle="solid"
+            >
+              <Radio value="normal">全部题目</Radio>
+              <Radio value="mistake">错题本</Radio>
+            </Radio.Group>
           </Form.Item>
           <Form.Item label="做题模式">
             <Radio.Group

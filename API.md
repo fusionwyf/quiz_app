@@ -1,6 +1,6 @@
 # Quiz App API 文档
 
-> 自动生成自代码（`api.py` / `models.py`）。包含：**已实现接口** ✅ 与 **待开发接口** ⚠️。
+> 基于代码（`api/routers/` 各域路由与 `api/models.py`）人工维护。包含：**已实现接口** ✅ 与 **待开发接口** ⚠️。
 
 ---
 
@@ -27,11 +27,6 @@
   - `is_correct: bool`
   - `correct_answer: List[str]`
   - `score_obtained: float`
-
-- `MistakeDTO`:
-  - `record_id: int`
-  - `question_content: str`
-  - `timestamp: datetime`
 
 - `CreateQuestionDTO`:
   - `bank_id: int`
@@ -110,13 +105,11 @@
 - 路径：`/session/{session_id}/answer`
 - 请求体：`AnswerSubmission`
 - 返回：`CheckResult`
-- 行为：记录 `ExamRecord`，若答完则把 `QuizSession.finished` 设为 `True`。
+- 行为：记录 `ExamRecord`；**答错自动入错题本**（`Mistake` upsert：已存在则 `wrong_count` +1 并刷新时间，连对清零）；答对且已在错题本中则连对 +1、达到阈值自动出本（已掌握）；若答完则把 `QuizSession.finished` 设为 `True`。
 - 错误：session 或题目不存在返回 404
 
-### 7) 获取错题列表（错题本）
-- 方法：GET
-- 路径：`/records/mistakes`
-- 返回：`List[MistakeDTO]`（由 `ExamRecord` 与 `Question` join 得到）
+### 7) 错题列表（已改道）
+> `GET /records/mistakes`（由答题记录派生的视图）**已废除**：错题本统一以 `Mistake` 表为唯一事实源，答错自动入本，见「10) 错题本管理」。
 
 ### 8) 核心题目 CRUD
 - **添加题目**
@@ -199,15 +192,10 @@
 
   > 提示：字符串内容导入请使用 `/banks/{bank_id}/import`；本地文件上传请使用 `/banks/{bank_id}/import/file`。
 
-### 10) 错题本管理（基于 Mistake 表）
-- **标记错题**
-  - 方法：POST
-  - 路径：`/mistakes/mark`
-  - 请求体：`{"question_id": int, "bank_id": int}`
-  - 返回：`{"message": "Question marked as mistake"}`
-  - 说明：如果已标记，则增加错误计数
+### 10) 错题本管理（基于 Mistake 表，唯一事实源）
+> 错题由**答错自动入本**（见 6)）；`POST /mistakes/mark`（手动标记）**已废除**。
 
-- **取消错题标记**
+- **已掌握（移出错题本）**
   - 方法：DELETE
   - 路径：`/mistakes/{question_id}`
   - 返回：`{"message": "Question removed from mistake book"}`
@@ -217,7 +205,11 @@
   - 方法：GET
   - 路径：`/mistakes`
   - 查询参数：`bank_id?: int`（可选，按题库过滤）
-  - 返回：错题列表，包含题目内容、错误计数、最后错误时间等
+  - 返回：错题列表，包含题目内容、题型、错误计数 `wrong_count`、连续答对次数 `consecutive_correct`、最后错误时间等
+
+- **连对出本阈值**
+  - GET `/mistakes/master-threshold` → `{"threshold": int}`（默认 2）
+  - PUT `/mistakes/master-threshold`，请求体 `{"value": int}`（须 >= 1，存 `AppSetting`）→ `{"threshold": int}`；非法值 400
 
 ### 11) Session 增强
 - **获取 Session 状态**
@@ -292,17 +284,14 @@
 ## 判题逻辑说明
 - `check_answer` 支持：
   - 单选/多选/判断：集合不分顺序匹配（选项字母统一大写后比较）
-  - 填空（`blank`）：做了基础的小写字符串比较（`blank_answer` 字段在模型中存在，但接口未完全使用）
+  - 填空（`blank`）：逐空比较，比较前归一化（全角转半角含标点、去首尾空格、忽略大小写）；每空支持 `|` 分隔多个备选答案，任一匹配即判对该空；空数不等判错（`blank_answer` 每空一项）
 - 分数规则：答对则返回题目 `score`，否则 `0.0`。
 
 ---
 
 ## 待开发接口 / 建议 ⚠️
 
-### 1. 多用户 / 认证（低→中优先级）
-- 用户认证（JWT）
-- 用户维度错题本与记录隔离
-- 用户个人学习进度统计
+> 暂无排队项。多用户 / 登录 / JWT 已被明确否决（见 `docs/adr/0001`），本产品保持本地单用户。
 
 ---
 
@@ -317,8 +306,4 @@
 ## 项目状态
 ✅ **核心功能已全部实现** - 题目管理、做题 Session、错题本、统计报表等核心功能均已可用。
 
-🚀 **下一步建议**：
-1. 添加用户认证系统（JWT）
-2. 编写前端界面（React/Vue + 本 API）
-3. 部署到服务器（Docker + Nginx）
-4. 编写单元测试和集成测试
+🚀 **下一步**：错题练习模式、备份/恢复、自动更新、暗色模式等，路线图见 GitHub Issues。

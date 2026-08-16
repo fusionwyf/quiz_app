@@ -12,7 +12,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { ReloadOutlined } from '@ant-design/icons';
-import { getMistakeBook, unmarkMistake } from '../api';
+import { getMistakeBook, markMastered } from '../api';
 import type { MistakeItem, QuestionType } from '../api/types';
 import { QUESTION_TYPE_LABELS } from '../api/types';
 
@@ -46,10 +46,10 @@ export default function MistakesPage() {
     return () => controller.abort();
   }, [load]);
 
-  const handleRemove = async (questionId: number) => {
+  const handleMastered = async (questionId: number) => {
     try {
-      await unmarkMistake(questionId);
-      message.success('已从错题本移除');
+      await markMastered(questionId);
+      message.success('已掌握，移出错题本');
       load();
     } catch {
       // ignore
@@ -76,6 +76,13 @@ export default function MistakesPage() {
       sorter: (a, b) => a.wrong_count - b.wrong_count,
     },
     {
+      title: '连续答对',
+      dataIndex: 'consecutive_correct',
+      width: 90,
+      render: (v: number) =>
+        v > 0 ? `${v} 次（连对达标自动出本）` : '—',
+    },
+    {
       title: '最后错误时间',
       dataIndex: 'last_wrong_at',
       width: 180,
@@ -86,13 +93,13 @@ export default function MistakesPage() {
       width: 100,
       render: (_, record) => (
         <Popconfirm
-          title="确定从错题本移除？"
-          onConfirm={() => handleRemove(record.question_id)}
-          okText="移除"
+          title="确认已掌握这道题？"
+          onConfirm={() => handleMastered(record.question_id)}
+          okText="已掌握"
           cancelText="取消"
         >
-          <Button type="link" danger size="small">
-            移除
+          <Button type="link" size="small">
+            已掌握
           </Button>
         </Popconfirm>
       ),

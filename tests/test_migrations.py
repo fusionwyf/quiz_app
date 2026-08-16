@@ -34,8 +34,13 @@ def test_fresh_db_stamped_latest(file_engine):
     assert ran == []
 
 
-def test_legacy_db_stamped_baseline_with_data(file_engine):
-    """迁移机制前的旧库（有表、version=0）：盖基线 1，已有数据完好"""
+def test_legacy_db_stamped_baseline_with_data(file_engine, monkeypatch):
+    """迁移机制前的旧库（有表、version=0）：盖基线 1，已有数据完好。
+
+    注：隔离真实迁移链（链上有 v2 步骤，会与本测试用当前模型建的表冲突），
+    真实链的旧库升级由 test_real_chain_upgrades_v1_mistake_table 覆盖。"""
+    monkeypatch.setattr(migrations, "MIGRATIONS", [])
+    monkeypatch.setattr(migrations, "SCHEMA_VERSION", 1)
     SQLModel.metadata.create_all(file_engine)
     with file_engine.connect() as conn:
         conn.exec_driver_sql("PRAGMA user_version = 0")  # 模拟旧库从未登记版本
@@ -65,7 +70,7 @@ def test_steps_apply_in_order_and_keep_data(file_engine, monkeypatch):
 
     def step_add_column(conn):
         conn.exec_driver_sql(
-            "ALTER TABLE mistake ADD COLUMN consecutive_correct INTEGER NOT NULL DEFAULT 0"
+            "ALTER TABLE mistake ADD COLUMN marker_col TEXT"
         )
 
     def step_add_table(conn):
@@ -83,7 +88,7 @@ def test_steps_apply_in_order_and_keep_data(file_engine, monkeypatch):
     assert _version(file_engine) == 3
     with file_engine.connect() as conn:
         cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(mistake)")]
-        assert "consecutive_correct" in cols
+        assert "marker_col" in cols
         assert conn.exec_driver_sql(
             "SELECT name FROM sqlite_master WHERE name='marker_v3'"
         ).fetchone() is not None
@@ -99,9 +104,7 @@ def test_rerun_is_idempotent(file_engine, monkeypatch):
 
     def step(conn):
         calls.append(1)
-        conn.exec_driver_sql(
-            "ALTER TABLE mistake ADD COLUMN consecutive_correct INTEGER NOT NULL DEFAULT 0"
-        )
+        conn.exec_driver_sql("ALTER TABLE mistake ADD COLUMN marker_col2 TEXT")
 
     monkeypatch.setattr(migrations, "MIGRATIONS", [(2, step)])
     monkeypatch.setattr(migrations, "SCHEMA_VERSION", 2)
@@ -152,3 +155,38 @@ def test_failing_step_rolls_back_version(file_engine, monkeypatch):
     with pytest.raises(Exception):
         migrations.run_migrations(file_engine)
     assert _version(file_engine) == 1
+
+
+def test_real_chain_upgrades_v1_mistake_table(file_engine):
+    """真实迁移链：v1 结构的 mistake 表（无连对列）带数据升级到当前版本"""
+    # 手工建 v1 时期的 mistake 表并写入数据（模拟老用户库）
+    with file_engine.connect() as conn:
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE mistake (
+                id INTEGER PRIMARY KEY,
+                bank_id INTEGER NOT NULL,
+                question_id INTEGER NOT NULL UNIQUE,
+                wrong_count INTEGER NOT NULL,
+                last_wrong_at TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO mistake (bank_id, question_id, wrong_count, last_wrong_at) "
+            "VALUES (1, 42, 3, '2026-01-01 00:00:00')"
+        )
+        conn.exec_driver_sql("PRAGMA user_version = 1")
+        conn.commit()
+
+    migrations.run_migrations(file_engine)  # 真实链：应用 v2 步骤
+
+    assert _version(file_engine) == migrations.SCHEMA_VERSION
+    with file_engine.connect() as conn:
+        cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(mistake)")]
+        assert "consecutive_correct" in cols
+        row = conn.exec_driver_sql(
+            "SELECT wrong_count, consecutive_correct FROM mistake WHERE question_id = 42"
+        ).fetchone()
+    assert row[0] == 3  # 数据保留
+    assert row[1] == 0  # 新列默认值

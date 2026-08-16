@@ -10,6 +10,7 @@ from api.deps import get_session
 from api.models import Question, ExamRecord, QuizSession
 from api.schemas import QuestionDTO
 from api.services.grading import check_answer
+from api.services import mistakes as mistake_service
 
 router = APIRouter()
 
@@ -149,6 +150,9 @@ def submit_session_answer(
         is_correct=is_right,
     )
     session_db.add(record)
+
+    # 答错自动入本；答错清零连对、连对达阈值自动出本（CONTEXT.md「错题」「已掌握」）
+    mistake_service.record_answer_result(session_db, q, is_right)
 
     qs.current_index += 1
     if qs.current_index >= qs.total:

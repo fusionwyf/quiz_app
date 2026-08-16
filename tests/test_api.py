@@ -494,55 +494,9 @@ def test_finish_session(client: TestClient, session: Session):
 
 # ======================================================
 # 错题本测试
+# （答错自动入本/连对出本语义见 test_mistake_book.py；
+#  POST /mistakes/mark 与 GET /records/mistakes 已随双机制合一废除）
 # ======================================================
-
-
-def test_get_mistakes_empty(client: TestClient):
-    """测试获取空错题列表"""
-    response = client.get("/records/mistakes")
-    assert response.status_code == 200
-    assert response.json() == []
-
-
-def test_get_mistakes(client: TestClient, session: Session):
-    """测试获取错题列表"""
-    bank = create_test_bank(session)
-    question = create_test_question(session, bank.id, content="测试题目")
-
-    # 创建一个错误记录
-    record = ExamRecord(
-        session_id=1,
-        question_id=question.id,
-        user_answer=["A"],  # 错误答案
-        is_correct=False,
-    )
-    session.add(record)
-    session.commit()
-
-    response = client.get("/records/mistakes")
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
-    assert data[0]["question_content"] == "测试题目"
-
-
-def test_mark_mistake(client: TestClient, session: Session):
-    """测试标记错题"""
-    bank = create_test_bank(session)
-    question = create_test_question(session, bank.id, content="测试题目")
-
-    mark_data = {"question_id": question.id, "bank_id": bank.id}
-
-    response = client.post("/mistakes/mark", json=mark_data)
-    assert response.status_code == 200
-    assert "marked" in response.json()["message"].lower()
-
-    # 验证错题已添加
-    mistake = session.exec(
-        select(Mistake).where(Mistake.question_id == question.id)
-    ).first()
-    assert mistake is not None
-    assert mistake.wrong_count == 1
 
 
 def test_unmark_mistake(client: TestClient, session: Session):

@@ -111,6 +111,8 @@ class Mistake(SQLModel, table=True):
     question_id: int = Field(unique=True, index=True)
     wrong_count: int = 1
     last_wrong_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # 连续答对次数（已掌握判定）：答错清零，达到阈值自动出本（见 services/mistakes.py）
+    consecutive_correct: int = 0
 
 
 def create_db_and_tables():

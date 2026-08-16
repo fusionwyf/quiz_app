@@ -1,99 +1,24 @@
-from datetime import datetime, UTC
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from api.deps import get_session
-from api.models import Question, ExamRecord, Mistake
+from api.models import Mistake, Question
+from api.services import mistakes as mistake_service
 
 router = APIRouter()
 
 
-class MistakeDTO(BaseModel):
-    record_id: int
-    question_content: str
-    timestamp: datetime
-
-
-class MarkMistakeRequest(BaseModel):
-    question_id: int
-    bank_id: int
-
-
-@router.get("/records/mistakes", response_model=list[MistakeDTO])
-def get_mistakes(session: Session = Depends(get_session)):
-    stmt = (
-        select(ExamRecord, Question)
-        .join(Question, ExamRecord.question_id == Question.id)
-        .where(ExamRecord.is_correct == False)
-        .order_by(ExamRecord.created_at.desc())
-    )
-
-    results = session.exec(stmt).all()
-    return [
-        MistakeDTO(
-            record_id=r.id,
-            question_content=q.content,
-            timestamp=r.created_at,
-        )
-        for r, q in results
-    ]
-
-
-@router.post("/mistakes/mark")
-def mark_mistake(
-    request: MarkMistakeRequest,
-    session: Session = Depends(get_session),
-):
-    """
-    标记题目为错题（加入错题本）
-    """
-    # 检查题目是否存在
-    question = session.get(Question, request.question_id)
-    if not question:
-        raise HTTPException(404, f"Question with id {request.question_id} not found")
-
-    # 检查是否已标记
-    existing = session.exec(
-        select(Mistake).where(Mistake.question_id == request.question_id)
-    ).first()
-
-    if existing:
-        # 已存在，增加错误计数
-        existing.wrong_count += 1
-        existing.last_wrong_at = datetime.now(UTC)
-        session.add(existing)
-    else:
-        # 创建新的错题记录
-        mistake = Mistake(
-            bank_id=request.bank_id,
-            question_id=request.question_id,
-            wrong_count=1,
-            last_wrong_at=datetime.now(UTC),
-        )
-        session.add(mistake)
-
-    session.commit()
-    return {"message": f"Question {request.question_id} marked as mistake"}
-
-
 @router.delete("/mistakes/{question_id}")
-def unmark_mistake(
+def mark_mastered_route(
     question_id: int,
     session: Session = Depends(get_session),
 ):
     """
-    从错题本中移除题目
+    已掌握：将题目移出错题本（错题由答错自动记录，无需手动加入）
     """
-    mistake = session.exec(
-        select(Mistake).where(Mistake.question_id == question_id)
-    ).first()
-
-    if not mistake:
+    if not mistake_service.mark_mastered(session, question_id):
         raise HTTPException(404, f"Mistake record for question {question_id} not found")
-
-    session.delete(mistake)
     session.commit()
     return {"message": f"Question {question_id} removed from mistake book"}
 
@@ -124,9 +49,32 @@ def get_mistake_book(
                 "question_content": question.content,
                 "question_type": question.type,
                 "wrong_count": mistake.wrong_count,
+                "consecutive_correct": mistake.consecutive_correct,
                 "last_wrong_at": mistake.last_wrong_at,
                 "bank_id": mistake.bank_id,
             }
         )
 
     return {"mistakes": mistakes_list}
+
+
+class MasterThresholdIn(BaseModel):
+    value: int
+
+
+@router.get("/mistakes/master-threshold")
+def get_master_threshold_route(session: Session = Depends(get_session)):
+    """连对出本阈值（默认 2）"""
+    return {"threshold": mistake_service.get_master_threshold(session)}
+
+
+@router.put("/mistakes/master-threshold")
+def set_master_threshold_route(
+    body: MasterThresholdIn, session: Session = Depends(get_session)
+):
+    """设置连对出本阈值（>=1，存应用设置）"""
+    if body.value < 1:
+        raise HTTPException(400, "阈值必须 >= 1")
+    mistake_service.set_master_threshold(session, body.value)
+    session.commit()
+    return {"threshold": body.value}

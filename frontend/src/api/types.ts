@@ -171,6 +171,7 @@ export interface MistakeItem {
   question_content: string;
   question_type: QuestionType;
   wrong_count: number;
+  consecutive_correct: number;
   last_wrong_at: string;
   bank_id: number;
 }

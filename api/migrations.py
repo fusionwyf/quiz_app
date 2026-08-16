@@ -16,10 +16,21 @@ from typing import Callable, List, Tuple
 from api.models import create_db_and_tables
 
 # 当前最新结构版本；追加迁移步骤时递增
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-# (目标版本, 从 target-1 升到 target 的步骤函数)。基线之后暂无步骤。
-MIGRATIONS: List[Tuple[int, Callable[[Connection], None]]] = []
+
+def _v2_mistake_consecutive_correct(conn: Connection) -> None:
+    """v1 → v2：错题表增加连对计数字段（T05 错题自动入本/已掌握）"""
+    conn.exec_driver_sql(
+        "ALTER TABLE mistake ADD COLUMN consecutive_correct INTEGER NOT NULL DEFAULT 0"
+    )
+
+
+# (目标版本, 从 target-1 升到 target 的步骤函数)，目标版本严格递增、从 2 开始。
+# 已随安装包发布的步骤【不可修改、不可删除】，只能链尾追加。
+MIGRATIONS: List[Tuple[int, Callable[[Connection], None]]] = [
+    (2, _v2_mistake_consecutive_correct),
+]
 
 
 def _get_user_version(conn: Connection) -> int:

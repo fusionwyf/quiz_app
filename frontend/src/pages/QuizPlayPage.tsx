@@ -14,13 +14,11 @@ import {
   Spin,
   Statistic,
   Typography,
-  message,
 } from 'antd';
 import {
   getCurrentQuestion,
   getSessionStatus,
   finishSession,
-  markMistake,
   submitAnswer,
 } from '../api';
 import type {
@@ -46,7 +44,6 @@ export default function QuizPlayPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [mistakeMarked, setMistakeMarked] = useState(false);
 
   // 初始化：加载 Session 状态与当前题目
   useEffect(() => {
@@ -78,7 +75,6 @@ export default function QuizPlayPage() {
           user_choices: choices,
         });
         setResult(res);
-        setMistakeMarked(false);
         const st = await getSessionStatus(sessionIdNum);
         setStatus(st);
       } catch {
@@ -108,17 +104,6 @@ export default function QuizPlayPage() {
       // ignore
     }
     setPhase('done');
-  };
-
-  const handleMarkMistake = async () => {
-    if (!question || !status) return;
-    try {
-      await markMistake(question.id, status.bank_id);
-      setMistakeMarked(true);
-      message.success('已加入错题本');
-    } catch {
-      // ignore
-    }
   };
 
   if (loading) {
@@ -239,10 +224,8 @@ export default function QuizPlayPage() {
               下一题
             </Button>
           )}
-          {!result.is_correct && !mistakeMarked && (
-            <Button size="large" onClick={handleMarkMistake}>
-              加入错题本
-            </Button>
+          {!result.is_correct && (
+            <Typography.Text type="warning">已自动加入错题本</Typography.Text>
           )}
         </Space>
       )}

@@ -205,18 +205,26 @@ export async function getMistakeBook(
   return data.mistakes;
 }
 
-export async function markMistake(
-  questionId: number,
-  bankId: number,
-): Promise<void> {
-  await client.post('/mistakes/mark', {
-    question_id: questionId,
-    bank_id: bankId,
-  });
+// 手动已掌握：移出错题本（错题由答错自动记录，无需手动加入）
+export async function markMastered(questionId: number): Promise<void> {
+  await client.delete(`/mistakes/${questionId}`);
 }
 
-export async function unmarkMistake(questionId: number): Promise<void> {
-  await client.delete(`/mistakes/${questionId}`);
+// ===== 连对出本阈值 =====
+
+export async function getMasterThreshold(): Promise<number> {
+  const { data } = await client.get<{ threshold: number }>(
+    '/mistakes/master-threshold',
+  );
+  return data.threshold;
+}
+
+export async function setMasterThreshold(value: number): Promise<number> {
+  const { data } = await client.put<{ threshold: number }>(
+    '/mistakes/master-threshold',
+    { value },
+  );
+  return data.threshold;
 }
 
 // ===== 答题记录与统计 =====

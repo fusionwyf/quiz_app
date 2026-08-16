@@ -18,6 +18,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -26,5 +27,13 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/quiz-backend"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY2NDdGQTEwQTdEN0YwNDYKUldSRzhOZW5FUHBIWnVHZmRxSzl1KytZLzlQNFZZZ3RRa01iTjRsb2xYZkpXa3NyR1p3a2J4QVMK",
+      "endpoints": [
+        "https://github.com/fusionwyf/quiz_app/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

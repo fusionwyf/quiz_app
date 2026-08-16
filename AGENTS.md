@@ -45,6 +45,7 @@ Windows 环境：shell 为 cmd，`ls`/`tail` 不可用，用 `dir`、`findstr`�
 - 后端进程清理是双保险：正常退出走 `RunEvent::Exit` → `taskkill /PID <pid> /T /F`（onefile 是 bootloader→server 进程树，必须整树杀）→ `std::process::exit(0)`；壳崩溃/被强杀时由 `backend_main.py` 的 `--parent-pid` 监听线程自杀兜底。改这两处时两条路径都要保住。
 - `frontend/src/api/client.ts` 优先读 `window.__BACKEND_PORT__`，其次 `VITE_API_BASE`，最后 8000——改端口逻辑时保持这个优先级。
 - **改后端代码后必须重跑 PyInstaller（build-desktop.bat 的 1、2 步）再 tauri build/dev**，否则桌面端跑的还是旧 sidecar。
+- 自动更新：tauri-plugin-updater + GitHub Releases（`latest.json` 由 `scripts/publish-release.py` 一键生成并随 Release 发布）；updater 签名私钥在 `%USERPROFILE%\.tauri\quiz_app_updater.key`，**不入库，丢失即无法再发自动更新**；发布前后按 `docs/release-checklist.md` 人工验证。
 - 数据库固定在用户数据目录（`%APPDATA%/quiz-app/database.db`，见 `api/models.py` 的 `get_app_data_dir`），与工作目录无关。
 
 ## 注意事项

@@ -11,6 +11,7 @@ import {
   SettingOutlined,
 } from '@ant-design/icons';
 import { useMistakeCount } from '../api/queries';
+import UpdateChecker from '../components/UpdateChecker';
 
 const { Sider, Content, Header } = Layout;
 
@@ -83,6 +84,9 @@ export default function AppLayout() {
           }}
         >
           刷题助手
+          <span style={{ marginInlineStart: 12 }}>
+            <UpdateChecker />
+          </span>
         </Header>
         <Content style={{ padding: 24, overflow: 'auto' }}>
           <Outlet />

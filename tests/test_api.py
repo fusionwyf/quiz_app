@@ -90,6 +90,89 @@ def test_list_banks_with_data(client: TestClient, session: Session):
     assert data[1]["name"] == "英语题库"
 
 
+def test_list_banks_with_question_count(client: TestClient, session: Session):
+    """GET /banks 返回每个库的题目数 question_count"""
+    bank1 = create_test_bank(session, "数学题库")
+    bank2 = create_test_bank(session, "英语题库")
+    create_test_question(session, bank1.id, content="题目1")
+    create_test_question(session, bank1.id, content="题目2")
+    create_test_question(session, bank2.id, content="题目3")
+
+    response = client.get("/banks")
+    assert response.status_code == 200
+    counts = {b["name"]: b["question_count"] for b in response.json()}
+    assert counts["数学题库"] == 2
+    assert counts["英语题库"] == 1
+
+
+def test_create_bank_duplicate_name(client: TestClient, session: Session):
+    """同名题库不允许重复创建，返回 409"""
+    create_test_bank(session, "已存在题库")
+
+    response = client.post("/banks/create", params={"name": "已存在题库"})
+    assert response.status_code == 409
+    assert "已存在" in response.json()["detail"]
+
+
+def test_create_bank_name_normalization(client: TestClient):
+    """名称首尾空白被去除；纯空白名称返回 400；去除后重名同样 409"""
+    ok = client.post("/banks/create", params={"name": "  带空格题库  "})
+    assert ok.status_code == 200
+    assert ok.json()["name"] == "带空格题库"
+
+    blank = client.post("/banks/create", params={"name": "   "})
+    assert blank.status_code == 400
+
+    dup = client.post("/banks/create", params={"name": " 带空格题库 "})
+    assert dup.status_code == 409
+
+
+def test_delete_bank_not_found(client: TestClient):
+    """删除不存在的题库返回 404"""
+    response = client.delete("/banks/9999")
+    assert response.status_code == 404
+
+
+def test_delete_bank_cascades(client: TestClient, session: Session):
+    """删除题库级联清理题目、Session、答题记录与错题"""
+    bank = create_test_bank(session, "待删除题库")
+    other = create_test_bank(session, "保留题库")
+
+    q1 = create_test_question(session, bank.id, content="题1")
+    q2 = create_test_question(session, bank.id, content="题2")
+    keep_q = create_test_question(session, other.id, content="保留题")
+
+    quiz_session = QuizSession(
+        bank_id=bank.id, mode="sequential", question_ids=[q1.id, q2.id], total=2
+    )
+    session.add(quiz_session)
+    session.commit()
+    session.refresh(quiz_session)
+
+    session.add(ExamRecord(session_id=quiz_session.id, question_id=q1.id, user_answer=["A"], is_correct=True))
+    session.add(ExamRecord(question_id=q2.id, user_answer=["B"], is_correct=False))  # 无 session 直接作答
+    session.add(ExamRecord(question_id=keep_q.id, user_answer=["A"], is_correct=True))
+    session.add(Mistake(bank_id=bank.id, question_id=q1.id))
+    session.add(Mistake(bank_id=other.id, question_id=keep_q.id))
+    session.commit()
+
+    response = client.delete(f"/banks/{bank.id}")
+    assert response.status_code == 200
+
+    assert session.get(QuestionBank, bank.id) is None
+    assert session.exec(select(Question).where(Question.bank_id == bank.id)).all() == []
+    assert session.exec(select(QuizSession).where(QuizSession.bank_id == bank.id)).all() == []
+    # 该库题目的答题记录（含无 session 的）与错题全部清除
+    assert session.exec(select(ExamRecord).where(ExamRecord.question_id.in_([q1.id, q2.id]))).all() == []
+    assert session.exec(select(Mistake).where(Mistake.bank_id == bank.id)).all() == []
+
+    # 其他题库的数据不受影响
+    assert session.get(QuestionBank, other.id) is not None
+    assert session.exec(select(Question).where(Question.bank_id == other.id)).all()[0].id == keep_q.id
+    assert len(session.exec(select(ExamRecord)).all()) == 1
+    assert len(session.exec(select(Mistake)).all()) == 1
+
+
 # ======================================================
 # 题目CRUD测试
 # ======================================================

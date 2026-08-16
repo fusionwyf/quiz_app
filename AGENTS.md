@@ -27,7 +27,7 @@ Windows 环境：shell 为 cmd，`ls`/`tail` 不可用，用 `dir`、`findstr`�
 - `api/api.py` — 所有 FastAPI 路由
 - `api/models.py` — SQLModel 数据模型与数据库配置
 - `api/parsers.py` — 题库文件解析（txt/md/docx，键值格式 + 通用试卷格式）
-- `api/llm.py` — 可选 LLM 智能整理（解析出 0 题时兜底，默认关闭，用 `LLM_PROVIDER` 等环境变量启用）
+- `api/llm.py` — 可选 LLM 智能整理（解析出 0 题自动兜底，导入接口 `force_llm` 可强制整理；配置优先级：数据库 AppSetting 表（`/llm/config` 写入）> `LLM_PROVIDER` 等环境变量）
 - `api/__init__.py` 导出 `app`（uvicorn 入口）
 - `frontend/src/api/` — API 封装层（types/client）；`pages/`、`components/`、`layouts/`
 - `tests/` — pytest 单元测试；`API.md` 为详细接口文档
@@ -48,5 +48,5 @@ Windows 环境：shell 为 cmd，`ls`/`tail` 不可用，用 `dir`、`findstr`�
 - Python >= 3.12；Pydantic v2。
 - CORS 白名单默认 `http://localhost:5173`（`CORS_ORIGINS` 可改）。
 - 数据库默认 `sqlite:///./database.db`（`DATABASE_URL` 可改），自动生成勿提交。
-- LLM 整理仅在解析结果为 0 题时触发，输出仍经解析器校验，失败自动回退。
+- LLM 整理默认在解析结果为 0 题时触发（`force_llm=true` 时强制），长文本按空行分块（≤8000 字符/块，上限 40 块）逐块整理；输出仍经解析器校验，失败自动回退并在响应 `ai_error` 说明原因。
 - 提交信息使用中文 conventional 风格（如 `feat(api): ...`、`fix: ...`）。

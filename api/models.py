@@ -95,6 +95,14 @@ class ExamRecord(SQLModel, table=True):
 
 
 # =========================
+# App Settings (键值配置，如 LLM 智能整理的 API 配置)
+# =========================
+class AppSetting(SQLModel, table=True):
+    key: str = Field(primary_key=True)
+    value: str = ""
+
+
+# =========================
 # Mistake Book (错题本)
 # =========================
 class Mistake(SQLModel, table=True):

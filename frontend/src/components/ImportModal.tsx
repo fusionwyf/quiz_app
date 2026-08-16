@@ -1,12 +1,14 @@
 // 题库文件导入弹窗：拖拽上传 txt / md / docx，展示导入结果
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Button,
+  Checkbox,
   List,
   Modal,
   Space,
   Statistic,
+  Tooltip,
   Typography,
   Upload,
   message,
@@ -15,6 +17,7 @@ import { InboxOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd';
 import { getLlmStatus, importQuestionsFile } from '../api';
 import type { ImportResult, LlmStatus } from '../api/types';
+import LlmSettingsForm from './LlmSettingsForm';
 
 const { Dragger } = Upload;
 const { Text } = Typography;
@@ -41,24 +44,24 @@ export default function ImportModal({
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
+  const [forceLlm, setForceLlm] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+
+  const loadLlmStatus = useCallback(() => {
+    getLlmStatus()
+      .then(setLlmStatus)
+      .catch(() => {});
+  }, []);
 
   // 弹窗打开时查询 LLM 智能整理状态（失败静默）
   useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    getLlmStatus()
-      .then((status) => {
-        if (!cancelled) setLlmStatus(status);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+    if (open) loadLlmStatus();
+  }, [open, loadLlmStatus]);
 
   const handleClose = () => {
     setFileList([]);
     setResult(null);
+    setForceLlm(false);
     onClose();
   };
 
@@ -70,7 +73,7 @@ export default function ImportModal({
     }
     setUploading(true);
     try {
-      const res = await importQuestionsFile(bankId, raw as File);
+      const res = await importQuestionsFile(bankId, raw as File, forceLlm);
       setResult(res);
       if (res.imported_count > 0) {
         onSuccess();
@@ -89,27 +92,45 @@ export default function ImportModal({
       onCancel={handleClose}
       width={560}
       footer={
-        <Space>
+        result ? (
+          // 导入完成（含成功/部分失败）后只保留关闭，避免误点再次导入造成重复
           <Button onClick={handleClose}>关闭</Button>
-          <Button
-            type="primary"
-            loading={uploading}
-            disabled={fileList.length === 0}
-            onClick={handleImport}
-          >
-            开始导入
-          </Button>
-        </Space>
+        ) : (
+          <Space>
+            <Button onClick={handleClose}>关闭</Button>
+            <Button
+              type="primary"
+              loading={uploading}
+              disabled={fileList.length === 0}
+              onClick={handleImport}
+            >
+              开始导入
+            </Button>
+          </Space>
+        )
       }
     >
       {!result ? (
         <>
-          {llmStatus?.enabled && (
+          {llmStatus?.enabled ? (
             <Alert
               type="info"
               showIcon
               style={{ marginBottom: 12 }}
               message={`已启用 AI 智能整理（${llmStatus.model}）：解析失败时自动兜底`}
+            />
+          ) : (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message="未配置 AI 智能整理"
+              description="配置 OpenAI 兼容 API 后，格式混乱的文件可由 AI 自动整理成标准格式再解析。"
+              action={
+                <Button size="small" onClick={() => setConfigOpen(true)}>
+                  配置
+                </Button>
+              }
             />
           )}
           <Dragger
@@ -139,6 +160,17 @@ export default function ImportModal({
               答案：B）
             </p>
           </Dragger>
+          <div style={{ marginTop: 12 }}>
+            <Tooltip title="忽略直接解析结果，文件内容全部经 AI 重新整理为标准格式（适合格式混乱、可能被解析出错误题目的文件）。长文件自动分块，耗时随文件大小增加。">
+              <Checkbox
+                checked={forceLlm}
+                disabled={!llmStatus?.enabled}
+                onChange={(e) => setForceLlm(e.target.checked)}
+              >
+                强制 AI 整理
+              </Checkbox>
+            </Tooltip>
+          </div>
         </>
       ) : (
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
@@ -174,14 +206,40 @@ export default function ImportModal({
             <Alert
               type="info"
               showIcon
-              message="本次导入由 AI 智能整理兜底完成（原文件格式无法直接解析）"
+              message="本次导入由 AI 智能整理完成（原文件格式无法直接解析）"
             />
           )}
-          {result.skipped_count === 0 && (
+          {(result.duplicate_count ?? 0) > 0 && (
+            <Alert
+              type="info"
+              showIcon
+              message={`其中 ${result.duplicate_count} 题与库内已有题目重复，已自动跳过`}
+            />
+          )}
+          {result.ai_error && (
+            <Alert type="warning" showIcon message={result.ai_error} />
+          )}
+          {result.skipped_count === 0 && !result.ai_error && (
             <Text type="success">全部题目导入成功</Text>
           )}
         </Space>
       )}
+      <Modal
+        title="配置 AI 智能整理"
+        open={configOpen}
+        footer={null}
+        onCancel={() => setConfigOpen(false)}
+        width={520}
+        destroyOnClose
+      >
+        <LlmSettingsForm
+          onSaved={() => {
+            setConfigOpen(false);
+            loadLlmStatus();
+          }}
+        />
+      </Modal>
     </Modal>
   );
 }
+

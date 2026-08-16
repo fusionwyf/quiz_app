@@ -197,10 +197,17 @@ def test_extract_text_markdown():
 # ======================================================
 
 
-def upload(client: TestClient, bank_id: int, filename: str, data: bytes):
-    """辅助：上传文件"""
+def upload(
+    client: TestClient,
+    bank_id: int,
+    filename: str,
+    data: bytes,
+    force_llm: bool = False,
+):
+    """辅助：上传文件（可选强制 AI 整理）"""
     return client.post(
         f"/banks/{bank_id}/import/file",
+        params={"force_llm": "true"} if force_llm else None,
         files={"file": (filename, data, "application/octet-stream")},
     )
 
@@ -315,7 +322,7 @@ def test_import_file_llm_fallback_success(
     """解析出 0 题且 LLM 启用：兜底整理后导入成功，ai_normalized=true"""
     bank = create_test_bank(session)
     monkeypatch.setenv("LLM_PROVIDER", "openai")
-    monkeypatch.setattr(llm, "normalize_quiz_text", lambda text: KEYVALUE_TXT)
+    monkeypatch.setattr(llm, "normalize_quiz_text", lambda text, cfg=None: KEYVALUE_TXT)
 
     response = upload(client, bank.id, "messy.txt", UNPARSEABLE_TXT.encode("utf-8"))
     assert response.status_code == 200
@@ -350,7 +357,7 @@ def test_import_file_llm_not_triggered_when_parse_ok(
     bank = create_test_bank(session)
     monkeypatch.setenv("LLM_PROVIDER", "openai")
 
-    def fail_if_called(text):
+    def fail_if_called(text, cfg=None):
         raise AssertionError("解析成功时不应调用 LLM")
 
     monkeypatch.setattr(llm, "normalize_quiz_text", fail_if_called)
@@ -368,7 +375,7 @@ def test_import_file_llm_error_falls_back(
     bank = create_test_bank(session)
     monkeypatch.setenv("LLM_PROVIDER", "openai")
 
-    def raise_error(text):
+    def raise_error(text, cfg=None):
         raise RuntimeError("LLM 连接失败")
 
     monkeypatch.setattr(llm, "normalize_quiz_text", raise_error)
@@ -378,6 +385,7 @@ def test_import_file_llm_error_falls_back(
     data = response.json()
     assert data["imported_count"] == 0
     assert data["ai_normalized"] is False
+    assert "LLM 连接失败" in data["ai_error"]
 
 
 def test_import_file_llm_normalize_still_zero(
@@ -386,13 +394,14 @@ def test_import_file_llm_normalize_still_zero(
     """整理后仍无法解析：保留原结果，ai_normalized=false"""
     bank = create_test_bank(session)
     monkeypatch.setenv("LLM_PROVIDER", "openai")
-    monkeypatch.setattr(llm, "normalize_quiz_text", lambda text: "仍然不是题目格式")
+    monkeypatch.setattr(llm, "normalize_quiz_text", lambda text, cfg=None: "仍然不是题目格式")
 
     response = upload(client, bank.id, "messy.txt", UNPARSEABLE_TXT.encode("utf-8"))
     assert response.status_code == 200
     data = response.json()
     assert data["imported_count"] == 0
     assert data["ai_normalized"] is False
+    assert data["ai_error"] is not None
 
 
 def test_llm_status_endpoint_default(client: TestClient, monkeypatch):
@@ -412,6 +421,75 @@ def test_llm_status_endpoint_enabled(client: TestClient, monkeypatch):
     data = response.json()
     assert data["enabled"] is True
     assert data["model"] == "qwen2.5:7b"
+
+
+# ======================================================
+# 导入去重测试
+# ======================================================
+
+
+def test_import_file_same_file_twice_dedup(
+    client: TestClient, session: Session
+):
+    """同一文件导入两次：第二次全部判重跳过，不产生两份题目"""
+    bank = create_test_bank(session)
+
+    first = upload(client, bank.id, "questions.txt", KEYVALUE_TXT.encode("utf-8"))
+    assert first.status_code == 200
+    assert first.json()["imported_count"] == 2
+    assert first.json()["duplicate_count"] == 0
+
+    second = upload(client, bank.id, "questions.txt", KEYVALUE_TXT.encode("utf-8"))
+    assert second.status_code == 200
+    data = second.json()
+    assert data["imported_count"] == 0
+    assert data["duplicate_count"] == 2
+    assert data["skipped_count"] == 2
+    assert any("重复" in e for e in data["errors"])
+
+    questions = session.exec(
+        select(Question).where(Question.bank_id == bank.id)
+    ).all()
+    assert len(questions) == 2
+
+
+def test_import_file_infile_duplicates_dedup(client: TestClient, session: Session):
+    """文件内部题干互相重复也只保留一份"""
+    bank = create_test_bank(session)
+    text = KEYVALUE_TXT + "\n\n" + KEYVALUE_TXT
+
+    response = upload(client, bank.id, "dup.txt", text.encode("utf-8"))
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 2
+    assert data["duplicate_count"] == 2
+
+
+def test_import_file_llm_result_dedup(
+    client: TestClient, session: Session, monkeypatch
+):
+    """LLM 整理结果与库内已有题目重复同样跳过"""
+    bank = create_test_bank(session)
+    upload(client, bank.id, "questions.txt", KEYVALUE_TXT.encode("utf-8"))
+
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setattr(
+        llm, "normalize_quiz_text", lambda text, cfg=None: KEYVALUE_TXT
+    )
+
+    response = upload(
+        client, bank.id, "messy.txt", UNPARSEABLE_TXT.encode("utf-8"), force_llm=True
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ai_normalized"] is True
+    assert data["imported_count"] == 0
+    assert data["duplicate_count"] == 2
+
+    questions = session.exec(
+        select(Question).where(Question.bank_id == bank.id)
+    ).all()
+    assert len(questions) == 2
 
 
 # ======================================================

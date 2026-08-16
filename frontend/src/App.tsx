@@ -9,6 +9,7 @@ import QuizStartPage from './pages/QuizStartPage';
 import QuizPlayPage from './pages/QuizPlayPage';
 import MistakesPage from './pages/MistakesPage';
 import RecordsPage from './pages/RecordsPage';
+import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/quiz/session/:sessionId" element={<QuizPlayPage />} />
             <Route path="/mistakes" element={<MistakesPage />} />
             <Route path="/records" element={<RecordsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

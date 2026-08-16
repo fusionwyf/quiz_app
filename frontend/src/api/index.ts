@@ -6,7 +6,10 @@ import type {
   CreateQuestionDTO,
   ExportResult,
   ImportResult,
+  LlmConfig,
+  LlmConfigInput,
   LlmStatus,
+  LlmTestResult,
   MistakeItem,
   PaginatedRecords,
   Question,
@@ -33,18 +36,29 @@ export async function createBank(name: string): Promise<QuestionBank> {
   return data;
 }
 
+/** 删除题库（后端级联删除题目、错题与答题记录） */
+export async function deleteBank(bankId: number): Promise<void> {
+  await client.delete(`/banks/${bankId}`);
+}
+
 // ===== 导入 / 导出 =====
 
 export async function importQuestionsFile(
   bankId: number,
   file: File,
+  forceLlm = false,
 ): Promise<ImportResult> {
   const form = new FormData();
   form.append('file', file);
   const { data } = await client.post<ImportResult>(
     `/banks/${bankId}/import/file`,
     form,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: forceLlm ? { force_llm: true } : undefined,
+      // AI 强制整理长文本分块调用耗时较长
+      timeout: 0,
+    },
   );
   return data;
 }
@@ -73,6 +87,32 @@ export async function getLlmStatus(): Promise<LlmStatus> {
   const { data } = await client.get<LlmStatus>('/llm/status', {
     silent: true,
   });
+  return data;
+}
+
+/** 查询生效配置（数据库覆盖 > 环境变量），API Key 脱敏 */
+export async function getLlmConfig(): Promise<LlmConfig> {
+  const { data } = await client.get<LlmConfig>('/llm/config');
+  return data;
+}
+
+/** 保存配置到数据库；空 base_url/model 清除覆盖，空 api_key 保留已存 Key */
+export async function updateLlmConfig(
+  payload: LlmConfigInput,
+): Promise<LlmConfig> {
+  const { data } = await client.put<LlmConfig>('/llm/config', payload);
+  return data;
+}
+
+/** 测试连通性：带 payload 先测后存，不带测已保存配置（失败由拦截器提示） */
+export async function testLlmConfig(
+  payload?: LlmConfigInput,
+): Promise<LlmTestResult> {
+  const { data } = await client.post<LlmTestResult>(
+    '/llm/test',
+    payload ?? null,
+    { timeout: 0 },
+  );
   return data;
 }
 

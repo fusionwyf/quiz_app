@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from sqlmodel import Session, select, func
+from sqlmodel import Session, select, func, or_
 import random
 
 from api.models import (
@@ -19,6 +19,7 @@ from api.models import (
     QuestionBank,
     QuizSession,
     Mistake,
+    AppSetting,
     create_db_and_tables,
 )
 from api.parsers import extract_text, parse_questions, parse_keyvalue_block
@@ -135,16 +136,77 @@ def check_answer(q: Question, user_answer: List[str]) -> bool:
 
 @app.get("/banks")
 def list_banks(session: Session = Depends(get_session)):
-    return session.exec(select(QuestionBank)).all()
+    """返回所有题库，附每个库的题目数（供前端直接同步展示）"""
+    banks = session.exec(select(QuestionBank)).all()
+    counts = dict(
+        session.exec(
+            select(Question.bank_id, func.count(Question.id)).group_by(
+                Question.bank_id
+            )
+        ).all()
+    )
+    return [
+        {**bank.model_dump(mode="json"), "question_count": counts.get(bank.id, 0)}
+        for bank in banks
+    ]
 
 
 @app.post("/banks/create")
 def create_bank(name: str, session: Session = Depends(get_session)):
+    name = name.strip()
+    if not name:
+        raise HTTPException(400, "题库名称不能为空")
+    exists = session.exec(
+        select(QuestionBank).where(QuestionBank.name == name)
+    ).first()
+    if exists:
+        raise HTTPException(409, f"题库名称已存在：{name}")
     bank = QuestionBank(name=name)
     session.add(bank)
     session.commit()
     session.refresh(bank)
     return bank
+
+
+@app.delete("/banks/{bank_id}")
+def delete_bank(bank_id: int, session: Session = Depends(get_session)):
+    """删除题库，并级联清理题目、做题 Session、答题记录与错题"""
+    bank = session.get(QuestionBank, bank_id)
+    if not bank:
+        raise HTTPException(404, f"QuestionBank with id {bank_id} not found")
+
+    question_ids = session.exec(
+        select(Question.id).where(Question.bank_id == bank_id)
+    ).all()
+    session_ids = session.exec(
+        select(QuizSession.id).where(QuizSession.bank_id == bank_id)
+    ).all()
+
+    # 答题记录：按题目关联（无 session 的直接作答）或按 session 关联两条路径都要清
+    if question_ids or session_ids:
+        conditions = []
+        if question_ids:
+            conditions.append(ExamRecord.question_id.in_(question_ids))
+        if session_ids:
+            conditions.append(ExamRecord.session_id.in_(session_ids))
+        for record in session.exec(select(ExamRecord).where(or_(*conditions))).all():
+            session.delete(record)
+    for mistake in session.exec(
+        select(Mistake).where(Mistake.bank_id == bank_id)
+    ).all():
+        session.delete(mistake)
+    for question in session.exec(
+        select(Question).where(Question.bank_id == bank_id)
+    ).all():
+        session.delete(question)
+    for quiz_session in session.exec(
+        select(QuizSession).where(QuizSession.bank_id == bank_id)
+    ).all():
+        session.delete(quiz_session)
+    session.delete(bank)
+    session.commit()
+
+    return {"message": f"Bank {bank_id} and related data deleted"}
 
 
 # ======================================================
@@ -713,6 +775,7 @@ MAX_REPORTED_ERRORS = 50
 async def import_questions_file(
     bank_id: int,
     file: UploadFile = File(...),
+    force_llm: bool = False,
     session: Session = Depends(get_session),
 ):
     """
@@ -720,6 +783,8 @@ async def import_questions_file(
     - 支持 .txt / .md / .docx，按扩展名自动识别格式
     - 文本内容兼容键值格式与通用试卷格式（自动探测）
     - 解析失败的题目跳过，错误明细随响应返回
+    - LLM 智能整理：解析出 0 题自动兜底；force_llm=true 时强制整理
+      （跳过直接解析结果，全部经 LLM 转为键值格式，长文本自动分块）
     """
     # 检查题库是否存在
     bank = session.get(QuestionBank, bank_id)
@@ -740,18 +805,47 @@ async def import_questions_file(
 
     questions, errors = parse_questions(text, bank_id)
 
-    # LLM 智能整理兜底：解析出 0 题且 LLM 已启用时，整理后重新解析
+    # LLM 智能整理：解析出 0 题自动兜底；force_llm 时无条件整理
+    cfg = llm.resolve_llm_config(session)
     ai_normalized = False
-    if not questions and llm.get_llm_status()["enabled"]:
-        try:
-            normalized = llm.normalize_quiz_text(text)
-            ai_questions, ai_errors = parse_questions(normalized, bank_id)
-            if ai_questions:
-                questions, errors = ai_questions, ai_errors
-                ai_normalized = True
-        except Exception:
-            # 兜底失败（LLM 不可用 / 整理后仍无法解析）保留原结果
-            pass
+    ai_error = None
+    if force_llm or not questions:
+        if cfg["provider"] not in ("openai", "local"):
+            if force_llm:
+                raise HTTPException(
+                    400, "LLM 未启用，无法强制 AI 整理（请先在设置中配置 API）"
+                )
+        else:
+            try:
+                normalized = llm.normalize_quiz_text_chunked(text, cfg)
+                ai_questions, ai_errors = parse_questions(normalized, bank_id)
+                if ai_questions:
+                    questions, errors = ai_questions, ai_errors
+                    ai_normalized = True
+                else:
+                    ai_error = "AI 整理后仍未解析出题目，保留直接解析结果"
+            except Exception as e:
+                # 整理失败（LLM 不可用 / 超出分块上限等）保留原结果并说明原因
+                ai_error = f"AI 整理失败：{e}"
+
+    # 去重：题干与库内已有题目（或本文件内已收录题目）重复的跳过，防止重复导入产生两份
+    existing_contents = {
+        content.strip()
+        for content in session.exec(
+            select(Question.content).where(Question.bank_id == bank_id)
+        ).all()
+    }
+    unique_questions = []
+    duplicate_count = 0
+    for question in questions:
+        key = question.content.strip()
+        if key in existing_contents:
+            duplicate_count += 1
+            errors.append(f"重复题目已跳过：{question.content[:30]}")
+        else:
+            existing_contents.add(key)
+            unique_questions.append(question)
+    questions = unique_questions
 
     for question in questions:
         session.add(question)
@@ -767,15 +861,111 @@ async def import_questions_file(
         "errors": reported_errors,
         "truncated": truncated,
         "ai_normalized": ai_normalized,
+        "ai_error": ai_error,
+        "duplicate_count": duplicate_count,
     }
 
 
+# ===== LLM 智能整理配置 =====
+
+
+class LlmConfigIn(BaseModel):
+    """LLM 配置写入体：空 base_url/model 表示清除覆盖（回退环境变量/默认值），
+    空 api_key 表示保留已存 Key"""
+
+    provider: str = "none"
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
+
+
+def _llm_config_payload(cfg: dict) -> dict:
+    return {
+        "provider": cfg["provider"],
+        "base_url": cfg["base_url"],
+        "model": cfg["model"],
+        "api_key_masked": llm.mask_api_key(cfg["api_key"]),
+        "api_key_set": bool(cfg["api_key"]),
+        "enabled": llm.get_llm_status(cfg)["enabled"],
+    }
+
+
+def _resolve_test_config(body: LlmConfigIn | None, session: Session) -> dict:
+    """测试连接用的配置：body 提供的字段覆盖已存配置（未保存即可先测）"""
+    cfg = llm.resolve_llm_config(session)
+    if body is None:
+        return cfg
+    provider = body.provider.strip().lower()
+    if provider not in ("none", "openai"):
+        raise HTTPException(400, "provider 仅支持 none / openai")
+    cfg["provider"] = provider
+    if body.base_url.strip():
+        cfg["base_url"] = body.base_url.strip().rstrip("/")
+    if body.model.strip():
+        cfg["model"] = body.model.strip()
+    if body.api_key.strip():
+        cfg["api_key"] = body.api_key.strip()
+    return cfg
+
+
+@app.get("/llm/config")
+def get_llm_config_route(session: Session = Depends(get_session)):
+    """查询当前生效的 LLM 配置（数据库覆盖 > 环境变量），API Key 脱敏"""
+    return _llm_config_payload(llm.resolve_llm_config(session))
+
+
+@app.put("/llm/config")
+def update_llm_config(body: LlmConfigIn, session: Session = Depends(get_session)):
+    """保存 LLM 配置到数据库（AppSetting 表）"""
+    provider = body.provider.strip().lower()
+    if provider not in ("none", "openai"):
+        raise HTTPException(400, "provider 仅支持 none / openai")
+    base_url = body.base_url.strip().rstrip("/")
+    if base_url and not base_url.startswith(("http://", "https://")):
+        raise HTTPException(400, "base_url 必须以 http:// 或 https:// 开头")
+
+    def _save(key: str, value: str):
+        if value:
+            row = session.get(AppSetting, key) or AppSetting(key=key)
+            row.value = value
+            session.add(row)
+        else:
+            row = session.get(AppSetting, key)
+            if row is not None:
+                session.delete(row)
+
+    # provider 始终落库（none 也存，用于显式禁用环境变量启用的 LLM）
+    _save("LLM_PROVIDER", provider)
+    _save("LLM_BASE_URL", base_url)
+    _save("LLM_MODEL", body.model.strip())
+    # 空 api_key = 保留已存 Key
+    if body.api_key.strip():
+        _save("LLM_API_KEY", body.api_key.strip())
+    session.commit()
+
+    return _llm_config_payload(llm.resolve_llm_config(session))
+
+
+@app.post("/llm/test")
+def test_llm_route(body: LlmConfigIn | None = None, session: Session = Depends(get_session)):
+    """
+    测试 LLM 连通性：带 body 时用 body 字段（未保存即可先测），
+    不带 body 时测已保存配置。失败返回 400 + 可读原因
+    """
+    cfg = _resolve_test_config(body, session)
+    try:
+        reply = llm.test_llm_connection(cfg)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "model": cfg["model"], "reply": reply}
+
+
 @app.get("/llm/status")
-def llm_status():
+def llm_status(session: Session = Depends(get_session)):
     """
-    查询 LLM 智能整理配置状态（供前端导入弹窗展示提示）
+    查询 LLM 智能整理配置状态（数据库覆盖 > 环境变量，供前端导入弹窗展示提示）
     """
-    return llm.get_llm_status()
+    return llm.get_llm_status(llm.resolve_llm_config(session))
 
 
 # ======================================================

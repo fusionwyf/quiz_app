@@ -58,13 +58,22 @@
 - 方法：GET
 - 路径：`/banks`
 - 描述：返回所有题库
-- 返回：`List[QuestionBank]`（`id, name, source, created_at`）
+- 返回：`List<QuestionBank & {question_count: int}>`（`id, name, source, created_at, question_count`，题目数由后端聚合查询直接给出）
 
 ### 2) 创建题库
 - 方法：POST
 - 路径：`/banks/create`
-- 参数：`name: str`（query 或表单）
+- 参数：`name: str`（query 或表单；首尾空白自动去除）
 - 描述：创建题库并返回 `QuestionBank`
+- 错误：名称为空/纯空白 400；**同名题库已存在 409**（`detail` 形如 `题库名称已存在：xxx`）
+
+### 2.1) 删除题库
+- 方法：DELETE
+- 路径：`/banks/{bank_id}`
+- 描述：删除题库，并级联删除该库全部**题目、做题 Session、答题记录（含无 Session 的直接作答）与错题**
+- 返回：`{"message": str}`
+- 错误：题库不存在 404
+- 说明：级联在应用层完成（除 `Question.bank_id` 外其余表无外键约束）；操作不可恢复，前端有二次确认
 
 ### 3) 随机出题
 - 方法：GET
@@ -156,12 +165,16 @@
   - 方法：POST
   - 路径：`/banks/{bank_id}/import/file`
   - 请求格式：`multipart/form-data`，字段 `file`（上传文件）
+  - 查询参数：`force_llm: bool = false`（可选，强制 AI 整理）
   - 支持扩展名：`.txt` / `.md`（`.markdown`）/ `.docx`，按扩展名自动识别格式
   - 限制：单文件最大 10MB；文本编码支持 UTF-8（自动回退 GBK）
-  - 返回：`{"message": str, "imported_count": int, "skipped_count": int, "errors": [str], "truncated": bool, "ai_normalized": bool}`
-  - 错误：题库不存在 404；不支持的扩展名/无法解码/空内容 400；超过大小限制 413
+  - 返回：`{"message": str, "imported_count": int, "skipped_count": int, "errors": [str], "truncated": bool, "ai_normalized": bool, "ai_error": str | null, "duplicate_count": int}`
+  - 错误：题库不存在 404；不支持的扩展名/无法解码/空内容 400；超过大小限制 413；`force_llm=true` 但 LLM 未启用 400
   - 说明：文本内容自动探测两种题目格式，解析失败的题目跳过并在 `errors` 中给出原因（最多 50 条）
-  - AI 兜底：解析出 0 题且 LLM 已启用（见 `GET /llm/status`）时，自动调用 LLM 将原文整理成键值格式后重新解析；`ai_normalized=true` 表示本次导入经过 AI 整理。LLM 未启用/调用失败/整理后仍 0 题时保持原结果不变
+  - 去重：入库前按**题干（去首尾空白）**与库内已有题目及本文件已收录题目比对，重复的跳过并计入 `duplicate_count`（同时进 `errors` 明细），重复导入同一文件不会产生两份题目
+  - AI 兜底：解析出 0 题且 LLM 已启用（见 `GET /llm/status`）时，自动调用 LLM 将原文整理成键值格式后重新解析；`ai_normalized=true` 表示本次导入的题目来自 AI 整理结果。LLM 未启用/调用失败/整理后仍 0 题时保持原结果不变，失败原因写入 `ai_error`
+  - 强制整理：`force_llm=true` 时跳过直接解析结果，全部经 LLM 整理后解析（适合"能被解析器硬解出一部分错题"的混乱文件）；LLM 失败时回退直接解析结果并设置 `ai_error`
+  - 分块：长文本按空行切块（单块 ≤ 8000 字符）逐块整理后合并解析，不再截断丢题；分块数上限 40（约 32 万字符），超出报错提示拆分文件
 
   **格式一：键值格式**（与 `/import` 的 txt 格式一致）：
   ```
@@ -238,13 +251,41 @@
   - 错误：题目不存在返回 404
 
 ### 13) LLM 智能整理（可选）
+
+配置优先级：数据库（`AppSetting` 表，经 `/llm/config` 写入）> 环境变量（`LLM_PROVIDER` / `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）> 内置默认值。数据库中存 `provider=none` 可显式禁用环境变量启用的 LLM。
+
+- **查询 LLM 配置**
+  - 方法：GET
+  - 路径：`/llm/config`
+  - 返回：`{"provider": str, "base_url": str, "model": str, "api_key_masked": str, "api_key_set": bool, "enabled": bool}`
+  - 说明：API Key 脱敏展示（如 `sk-****cdef`），不返回明文
+
+- **保存 LLM 配置**
+  - 方法：PUT
+  - 路径：`/llm/config`
+  - 请求体：`{"provider": str, "base_url"?: str, "model"?: str, "api_key"?: str}`
+    - `provider`：`none`（禁用）/ `openai`（任意 OpenAI 兼容端点）
+    - `base_url`：须以 `http://` 或 `https://` 开头；空值清除覆盖（回退环境变量/默认值 `http://localhost:11434/v1`，即 Ollama）
+    - `model`：空值清除覆盖（回退环境变量/默认值 `qwen2.5:3b`）
+    - `api_key`：**空值表示保留已存 Key**（前端无需重输），不支持显式清空
+  - 返回：同 GET（脱敏后的生效配置）
+  - 错误：`provider` 非法或 `base_url` 协议不对返回 400
+  - 说明：配置明文存储在本地数据库 `AppSetting` 表；`local`（llama-cpp-python）模式仅支持环境变量配置，不提供前端写入
+
+- **测试 LLM 连通性**
+  - 方法：POST
+  - 路径：`/llm/test`
+  - 请求体：可选，同 PUT（带 body 时用 body 字段覆盖已存配置测试，先测后存；不带 body 测已保存配置）
+  - 返回：`{"ok": true, "model": str, "reply": str}`（`reply` 为模型对 ping 消息的回复）
+  - 错误：未启用 400；连接失败/鉴权失败等 400，`detail` 含可读原因
+
 - **获取 LLM 配置状态**
   - 方法：GET
   - 路径：`/llm/status`
   - 返回：`{"provider": str, "enabled": bool, "model": str}`
     - `provider`：`none`（默认，未配置）/ `openai`（任意 OpenAI 兼容端点）/ `local`（llama-cpp-python 内嵌 GGUF）
     - `enabled`：`provider` 非 `none` 时为 `true`
-  - 说明：供前端导入弹窗展示"已启用 AI 智能整理"提示使用
+  - 说明：反映数据库+环境变量合并后的最终状态，供前端导入弹窗展示"已启用 AI 智能整理"提示使用
 
 ---
 

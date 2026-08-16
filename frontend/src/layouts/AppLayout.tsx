@@ -7,6 +7,7 @@ import {
   DatabaseOutlined,
   EditOutlined,
   FileTextOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 
 const { Sider, Content, Header } = Layout;
@@ -16,6 +17,7 @@ const menuItems = [
   { key: '/quiz/start', icon: <EditOutlined />, label: '开始做题' },
   { key: '/mistakes', icon: <BookOutlined />, label: '错题本' },
   { key: '/records', icon: <FileTextOutlined />, label: '答题记录' },
+  { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
 ];
 
 export default function AppLayout() {

@@ -16,6 +16,8 @@ export interface QuestionBank {
   name: string;
   source?: string | null;
   created_at: string;
+  /** 库内题目数（GET /banks 返回） */
+  question_count?: number;
 }
 
 // ===== 题目 =====
@@ -123,6 +125,10 @@ export interface ImportResult {
   truncated: boolean;
   /** 是否经过 LLM 智能整理兜底 */
   ai_normalized?: boolean;
+  /** LLM 整理尝试失败时的原因（未尝试或成功时为 null） */
+  ai_error?: string | null;
+  /** 与库内已有题目（或文件内部）题干重复而跳过的数量 */
+  duplicate_count?: number;
 }
 
 // ===== LLM 智能整理 =====
@@ -131,6 +137,30 @@ export interface LlmStatus {
   provider: string;
   enabled: boolean;
   model: string;
+}
+
+/** GET /llm/config 返回的生效配置（API Key 脱敏） */
+export interface LlmConfig {
+  provider: string;
+  base_url: string;
+  model: string;
+  api_key_masked: string;
+  api_key_set: boolean;
+  enabled: boolean;
+}
+
+/** PUT /llm/config 与 POST /llm/test 的请求体（空 api_key 表示保留已存 Key） */
+export interface LlmConfigInput {
+  provider: string;
+  base_url?: string;
+  model?: string;
+  api_key?: string;
+}
+
+export interface LlmTestResult {
+  ok: boolean;
+  model: string;
+  reply: string;
 }
 
 // ===== 错题本 =====

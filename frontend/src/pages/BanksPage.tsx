@@ -1,4 +1,4 @@
-// 题库管理页：题库列表、创建、导入导出入口
+// 题库管理页：题库列表、创建、导入导出、删除
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -8,6 +8,7 @@ import {
   Empty,
   Input,
   Modal,
+  Popconfirm,
   Row,
   Space,
   Spin,
@@ -15,11 +16,12 @@ import {
   message,
 } from 'antd';
 import {
+  DeleteOutlined,
   DownloadOutlined,
   PlusOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
-import { createBank, exportQuestions, exportUrl, listBanks } from '../api';
+import { createBank, deleteBank, exportUrl, listBanks } from '../api';
 import type { QuestionBank } from '../api/types';
 import ImportModal from '../components/ImportModal';
 
@@ -28,7 +30,6 @@ const { Text } = Typography;
 export default function BanksPage() {
   const navigate = useNavigate();
   const [banks, setBanks] = useState<QuestionBank[]>([]);
-  const [counts, setCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -39,19 +40,7 @@ export default function BanksPage() {
     setLoading(true);
     try {
       const list = await listBanks(signal);
-      setBanks(list);
-      // 题目数通过 export json 获取（空题库会返回 404，静默计为 0）
-      const results = await Promise.allSettled(
-        list.map((b) =>
-          exportQuestions(b.id, { silent: true, signal }),
-        ),
-      );
-      const map: Record<number, number> = {};
-      results.forEach((r, i) => {
-        map[list[i].id] =
-          r.status === 'fulfilled' ? r.value.question_count : 0;
-      });
-      setCounts(map);
+      if (!signal?.aborted) setBanks(list);
     } catch {
       // 错误提示已由拦截器处理
     } finally {
@@ -66,23 +55,39 @@ export default function BanksPage() {
     return () => controller.abort();
   }, [loadBanks]);
 
+  // 创建弹窗重名预检（后端 409 为最终兜底）
+  const trimmed = newName.trim();
+  const duplicate = trimmed !== '' && banks.some((b) => b.name === trimmed);
+
   const handleCreate = async () => {
-    const name = newName.trim();
+    const name = trimmed;
     if (!name) {
       message.warning('请输入题库名称');
       return;
     }
     setCreating(true);
     try {
-      await createBank(name);
-      message.success('题库创建成功');
+      const created = await createBank(name);
+      message.success('题库创建成功，马上导入题目吧');
       setCreateOpen(false);
       setNewName('');
       loadBanks();
+      // 创建后直接进入导入流程，省去再找一遍题库卡片
+      setImportBank(created);
     } catch {
-      // ignore
+      // 错误提示已由拦截器处理（如 409 重名）
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDelete = async (bank: QuestionBank) => {
+    try {
+      await deleteBank(bank.id);
+      message.success(`题库「${bank.name}」已删除`);
+      loadBanks();
+    } catch {
+      // 错误提示已由拦截器处理
     }
   };
 
@@ -111,7 +116,9 @@ export default function BanksPage() {
             <Col xs={24} sm={12} lg={8} key={bank.id}>
               <Card
                 title={bank.name}
-                extra={<Text type="secondary">{counts[bank.id] ?? 0} 题</Text>}
+                extra={
+                  <Text type="secondary">{bank.question_count ?? 0} 题</Text>
+                }
                 actions={[
                   <Button
                     type="link"
@@ -134,6 +141,19 @@ export default function BanksPage() {
                   <a key="txt" href={exportUrl(bank.id, 'txt')} target="_blank">
                     <DownloadOutlined /> TXT
                   </a>,
+                  <Popconfirm
+                    key="delete"
+                    title={`删除题库「${bank.name}」？`}
+                    description="将同时删除库内题目、错题与答题记录，不可恢复"
+                    okText="删除"
+                    okButtonProps={{ danger: true }}
+                    cancelText="取消"
+                    onConfirm={() => handleDelete(bank)}
+                  >
+                    <Button type="link" danger icon={<DeleteOutlined />}>
+                      删除
+                    </Button>
+                  </Popconfirm>,
                 ]}
               >
                 <Text type="secondary">
@@ -151,6 +171,7 @@ export default function BanksPage() {
         onCancel={() => setCreateOpen(false)}
         onOk={handleCreate}
         confirmLoading={creating}
+        okButtonProps={{ disabled: !trimmed || duplicate }}
         okText="创建"
         cancelText="取消"
       >
@@ -160,6 +181,11 @@ export default function BanksPage() {
           onChange={(e) => setNewName(e.target.value)}
           onPressEnter={handleCreate}
         />
+        {duplicate && (
+          <Text type="danger" style={{ fontSize: 12 }}>
+            该名称已存在，请换一个
+          </Text>
+        )}
       </Modal>
 
       {importBank && (

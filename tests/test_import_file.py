@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-import api.api as api_module
+import api.routers.banks as banks_router
 import api.llm as llm
 import api.parsers as parsers
 from api.models import Question, QuestionBank
@@ -302,7 +302,7 @@ def test_import_file_too_large(
 ):
     """超过大小限制返回 413"""
     bank = create_test_bank(session)
-    monkeypatch.setattr(api_module, "MAX_IMPORT_FILE_SIZE", 10)
+    monkeypatch.setattr(banks_router, "MAX_IMPORT_FILE_SIZE", 10)
 
     response = upload(client, bank.id, "a.txt", b"x" * 20)
     assert response.status_code == 413

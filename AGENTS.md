@@ -24,7 +24,10 @@ Windows 环境：shell 为 cmd，`ls`/`tail` 不可用，用 `dir`、`findstr`�
 
 ## 结构与分层
 
-- `api/api.py` — 所有 FastAPI 路由
+- `api/api.py` — 应用组装层（FastAPI 实例、CORS、lifespan、路由挂载）；`conftest.py` 与 `backend_main.py` 依赖 `from api.api import app, get_session`，勿破坏这两个导入点
+- `api/routers/` — 按域拆分的路由（banks / questions / sessions / mistakes / records / llm_config），路由只做参数校验与编排
+- `api/services/` — 业务规则（grading 判分、banks 级联删除）；新业务逻辑落这里，不进路由
+- `api/deps.py` — `get_session` 依赖；`api/constants.py` — 题目类型等常量；`api/schemas.py` — 跨路由共享 DTO
 - `api/models.py` — SQLModel 数据模型与数据库配置
 - `api/parsers.py` — 题库文件解析（txt/md/docx，键值格式 + 通用试卷格式）
 - `api/llm.py` — 可选 LLM 智能整理（解析出 0 题自动兜底，导入接口 `force_llm` 可强制整理；配置优先级：数据库 AppSetting 表（`/llm/config` 写入）> `LLM_PROVIDER` 等环境变量）
@@ -32,7 +35,7 @@ Windows 环境：shell 为 cmd，`ls`/`tail` 不可用，用 `dir`、`findstr`�
 - `frontend/src/api/` — API 封装层（types/client）；`pages/`、`components/`、`layouts/`
 - `tests/` — pytest 单元测试；`API.md` 为详细接口文档
 
-改动约定：新增接口需同步更新 `API.md`；新功能按 models → api 路由 → 测试 → 文档顺序。
+改动约定：新增接口需同步更新 `API.md`；新功能按 models → services → routers → 测试 → 文档顺序。
 
 ## 桌面打包架构（Tauri + sidecar）
 

@@ -27,11 +27,13 @@ def _version(engine) -> int:
 
 
 def test_fresh_db_stamped_latest(file_engine):
-    """全新库：create_all 已建出最新结构，直接盖 SCHEMA_VERSION，不跑步骤"""
-    ran = []
+    """全新库 + 真实迁移链：建最新结构、盖最新版本号、步骤不重跑（回归：曾因
+    建表先于版本判定 + 全局引擎建表，新库被误判旧库后 v2 加列崩溃）"""
     migrations.run_migrations(file_engine)
     assert _version(file_engine) == migrations.SCHEMA_VERSION
-    assert ran == []
+    with file_engine.connect() as conn:
+        cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(mistake)")]
+        assert "consecutive_correct" in cols  # 最新结构已含新列，步骤未重复执行
 
 
 def test_legacy_db_stamped_baseline_with_data(file_engine, monkeypatch):
@@ -157,9 +159,9 @@ def test_failing_step_rolls_back_version(file_engine, monkeypatch):
     assert _version(file_engine) == 1
 
 
-def test_real_chain_upgrades_v1_mistake_table(file_engine):
-    """真实迁移链：v1 结构的 mistake 表（无连对列）带数据升级到当前版本"""
-    # 手工建 v1 时期的 mistake 表并写入数据（模拟老用户库）
+def test_real_chain_upgrades_v1_tables(file_engine):
+    """真实迁移链：v1 结构（mistake 无连对列、questionbank 带 source）带数据升级到当前版本"""
+    # 手工建 v1 时期的表并写入数据（模拟老用户库）
     with file_engine.connect() as conn:
         conn.exec_driver_sql(
             """
@@ -173,20 +175,36 @@ def test_real_chain_upgrades_v1_mistake_table(file_engine):
             """
         )
         conn.exec_driver_sql(
+            """
+            CREATE TABLE questionbank (
+                id INTEGER PRIMARY KEY,
+                name VARCHAR NOT NULL,
+                source VARCHAR,
+                created_at TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql("INSERT INTO questionbank (name, source, created_at) "
+                             "VALUES ('旧库', NULL, '2026-01-01 00:00:00')")
+        conn.exec_driver_sql(
             "INSERT INTO mistake (bank_id, question_id, wrong_count, last_wrong_at) "
             "VALUES (1, 42, 3, '2026-01-01 00:00:00')"
         )
         conn.exec_driver_sql("PRAGMA user_version = 1")
         conn.commit()
 
-    migrations.run_migrations(file_engine)  # 真实链：应用 v2 步骤
+    migrations.run_migrations(file_engine)  # 真实链：v2 加列、v3 删 source
 
     assert _version(file_engine) == migrations.SCHEMA_VERSION
     with file_engine.connect() as conn:
-        cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(mistake)")]
-        assert "consecutive_correct" in cols
+        mistake_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(mistake)")]
+        assert "consecutive_correct" in mistake_cols
+        bank_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(questionbank)")]
+        assert "source" not in bank_cols
         row = conn.exec_driver_sql(
             "SELECT wrong_count, consecutive_correct FROM mistake WHERE question_id = 42"
         ).fetchone()
+        name = conn.exec_driver_sql("SELECT name FROM questionbank").fetchone()[0]
     assert row[0] == 3  # 数据保留
     assert row[1] == 0  # 新列默认值
+    assert name == "旧库"

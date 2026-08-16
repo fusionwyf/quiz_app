@@ -6,7 +6,7 @@ from sqlmodel import Session, select, func
 
 from api.constants import QUESTION_TYPES
 from api.deps import get_session
-from api.models import QuestionBank, Question
+from api.models import QuestionBank, Question, ExamRecord, Mistake
 from api.schemas import QuestionDTO
 
 router = APIRouter()
@@ -198,6 +198,16 @@ def delete_question(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(404, f"Question with id {question_id} not found")
+
+    # 级联清理该题的答题记录与错题，防止孤儿数据（错题练习取题时 500）
+    for record in session.exec(
+        select(ExamRecord).where(ExamRecord.question_id == question_id)
+    ).all():
+        session.delete(record)
+    for mistake in session.exec(
+        select(Mistake).where(Mistake.question_id == question_id)
+    ).all():
+        session.delete(mistake)
 
     session.delete(question)
     session.commit()

@@ -14,7 +14,6 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 export interface QuestionBank {
   id: number;
   name: string;
-  source?: string | null;
   created_at: string;
   /** 库内题目数（GET /banks 返回） */
   question_count?: number;

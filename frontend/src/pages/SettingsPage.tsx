@@ -1,8 +1,7 @@
 // 系统设置页：错题连对出本阈值 + LLM 智能整理 API 配置
-import { Typography } from 'antd';
+import { Card, Typography } from 'antd';
 import LlmSettingsForm from '../components/LlmSettingsForm';
 import MistakeThresholdForm from '../components/MistakeThresholdForm';
-import { Card } from 'antd';
 
 const { Paragraph } = Typography;
 

@@ -35,7 +35,6 @@ engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
 class QuestionBank(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
-    source: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -115,8 +114,10 @@ class Mistake(SQLModel, table=True):
     consecutive_correct: int = 0
 
 
-def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
+def create_db_and_tables(target_engine=None):
+    """建表（只建缺失的表，不改已有表结构——schema 演进走 api/migrations.py）。
+    target_engine 缺省用全局引擎；迁移机制传入待迁移的引擎。"""
+    SQLModel.metadata.create_all(target_engine or engine)
 
 
 if __name__ == "__main__":

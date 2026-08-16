@@ -16,7 +16,7 @@ from typing import Callable, List, Tuple
 from api.models import create_db_and_tables
 
 # 当前最新结构版本；追加迁移步骤时递增
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def _v2_mistake_consecutive_correct(conn: Connection) -> None:
@@ -26,10 +26,16 @@ def _v2_mistake_consecutive_correct(conn: Connection) -> None:
     )
 
 
+def _v3_drop_bank_source(conn: Connection) -> None:
+    """v2 → v3：移除题库表从未使用的 source 字段（spec P0）"""
+    conn.exec_driver_sql("ALTER TABLE questionbank DROP COLUMN source")
+
+
 # (目标版本, 从 target-1 升到 target 的步骤函数)，目标版本严格递增、从 2 开始。
 # 已随安装包发布的步骤【不可修改、不可删除】，只能链尾追加。
 MIGRATIONS: List[Tuple[int, Callable[[Connection], None]]] = [
     (2, _v2_mistake_consecutive_correct),
+    (3, _v3_drop_bank_source),
 ]
 
 
@@ -50,15 +56,23 @@ def _has_legacy_tables(conn: Connection) -> bool:
 
 
 def run_migrations(engine: Engine) -> None:
-    """把数据库升级到 SCHEMA_VERSION；幂等，可安全地在每次启动时调用。"""
-    create_db_and_tables()  # 全新库先建出最新结构（旧库此调用无副作用）
+    """把数据库升级到 SCHEMA_VERSION；幂等，可安全地在每次启动时调用。
 
+    引导规则（必须在建表之前判定，否则新库刚建的表会被误判为旧结构）：
+    - user_version=0 且无表 → 全新库：建最新结构、盖最新版本号、不跑步骤
+    - user_version=0 且有表 → 迁移机制引入前的旧库：盖基线 1 后走链
+    """
     with engine.connect() as conn:
         version = _get_user_version(conn)
 
         if version == 0:
-            # 迁移机制引入前的库：无表 = 刚建出的最新结构；有表 = 旧结构，从基线 1 起步
-            version = 1 if _has_legacy_tables(conn) else SCHEMA_VERSION
+            if _has_legacy_tables(conn):
+                version = 1  # 旧库：从基线起步行链
+            else:
+                create_db_and_tables(engine)  # 全新库：最新结构 + 直接盖最新版
+                _set_user_version(conn, SCHEMA_VERSION)
+                conn.commit()
+                return
             _set_user_version(conn, version)
             conn.commit()
 

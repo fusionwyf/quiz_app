@@ -1,9 +1,10 @@
-// 错题本页：错题列表与移除
+// 错题本页：错题列表（可按题库筛选）与已掌握移出
 import { useCallback, useEffect, useState } from 'react';
 import {
   Button,
   Empty,
   Popconfirm,
+  Select,
   Space,
   Table,
   Tag,
@@ -12,8 +13,8 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { ReloadOutlined } from '@ant-design/icons';
-import { getMistakeBook, markMastered } from '../api';
-import type { MistakeItem, QuestionType } from '../api/types';
+import { getMistakeBook, listBanks, markMastered } from '../api';
+import type { MistakeItem, QuestionBank, QuestionType } from '../api/types';
 import { QUESTION_TYPE_LABELS } from '../api/types';
 
 const TYPE_COLORS: Record<QuestionType, string> = {
@@ -26,11 +27,13 @@ const TYPE_COLORS: Record<QuestionType, string> = {
 export default function MistakesPage() {
   const [mistakes, setMistakes] = useState<MistakeItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [banks, setBanks] = useState<QuestionBank[]>([]);
+  const [bankId, setBankId] = useState<number | undefined>(undefined);
 
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async (signal?: AbortSignal, bank?: number) => {
     setLoading(true);
     try {
-      const list = await getMistakeBook(undefined, signal);
+      const list = await getMistakeBook(bank, signal);
       setMistakes(list);
     } catch {
       // 忽略（含过期请求取消）
@@ -42,15 +45,21 @@ export default function MistakesPage() {
   useEffect(() => {
     // 组件卸载/重新挂载时取消过期请求，避免旧响应覆盖新数据
     const controller = new AbortController();
-    load(controller.signal);
+    load(controller.signal, bankId);
     return () => controller.abort();
-  }, [load]);
+  }, [load, bankId]);
+
+  useEffect(() => {
+    listBanks()
+      .then(setBanks)
+      .catch(() => {});
+  }, []);
 
   const handleMastered = async (questionId: number) => {
     try {
       await markMastered(questionId);
       message.success('已掌握，移出错题本');
-      load();
+      load(undefined, bankId);
     } catch {
       // ignore
     }
@@ -109,10 +118,23 @@ export default function MistakesPage() {
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>
-          错题本（{mistakes.length} 题）
-        </Typography.Title>
-        <Button icon={<ReloadOutlined />} onClick={() => load()}>
+        <Space>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            错题本（{mistakes.length} 题）
+          </Typography.Title>
+          <Select
+            allowClear
+            placeholder="全部题库"
+            style={{ width: 180 }}
+            value={bankId}
+            onChange={(v) => setBankId(v)}
+            options={banks.map((b) => ({ value: b.id, label: b.name }))}
+          />
+        </Space>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => load(undefined, bankId)}
+        >
           刷新
         </Button>
       </Space>

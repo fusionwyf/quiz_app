@@ -137,3 +137,21 @@ def test_correct_answer_never_in_book(client, session):
     _answer(client, bank_id, qid, "A")
     _answer(client, bank_id, qid, "A")
     assert _entry(client, qid) is None
+
+
+def test_delete_question_cascades_mistake(client, session):
+    """删除题目时级联清理其错题与记录（回归：孤儿错题导致错题练习 500）"""
+    bank_id, qid = _make_bank_with_question(session)
+    _answer(client, bank_id, qid, "B")
+    assert _entry(client, qid) is not None
+
+    assert client.delete(f"/questions/{qid}").status_code == 200
+
+    assert _entry(client, qid) is None
+    # 错题练习开练不再撞孤儿数据：明确 404 暂无错题
+    resp = client.post(f"/session/start?bank_id={bank_id}&source=mistake")
+    assert resp.status_code == 404
+    assert "暂无错题" in resp.json()["detail"]
+    # 答题记录同样清理
+    records = client.get("/records").json()["records"]
+    assert all(r["question_id"] != qid for r in records)

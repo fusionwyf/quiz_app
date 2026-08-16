@@ -122,7 +122,7 @@ LLM_PROVIDER=local LOCAL_LLM_MODEL_PATH=/path/to/model.gguf uv run uvicorn api:a
 | 随机出题 | `GET /quiz/random` | 从题库随机抽题 |
 | 做题Session | `POST /session/start`, `GET /session/{id}/current`, `POST /session/{id}/answer` | 顺序/随机做题，自动判题 |
 | Session增强 | `GET /session/{id}/status`, `POST /session/{id}/finish` | 进度统计、手动结束 |
-| 错题本 | `GET /records/mistakes`, `POST /mistakes/mark`, `DELETE /mistakes/{id}` | 错题记录与管理 |
+| 错题本 | 错题本 | `GET /mistakes`, `DELETE /mistakes/{id}`, `GET/PUT /mistakes/master-threshold` | 答错自动入本；已掌握移出；连对出本阈值 |
 | 数据导入导出 | `POST /banks/{id}/import`, `POST /banks/{id}/import/file`, `GET /banks/{id}/export` | JSON/TXT字符串导入、txt/md/docx文件上传导入、JSON/TXT导出 |
 | 统计报表 | `GET /records`, `GET /stats/questions/{id}` | 答题记录、题目统计 |
 
@@ -258,9 +258,7 @@ cd frontend && npm run tauri dev
 # 使用Gunicorn运行（Linux/macOS）
 uv run gunicorn api:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
 
-# 使用Docker
-docker build -t quiz-app .
-docker run -p 8000:8000 quiz-app
+# 桌面端为主要分发形态（build-desktop.bat）；容器化部署暂未提供 Dockerfile
 ```
 
 ### 环境变量配置

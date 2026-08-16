@@ -22,6 +22,7 @@ interface FormValues {
   options?: Record<string, string>;
   /** 单选模式下 Select 返回字符串，多选返回数组 */
   answer?: string[] | string;
+  /** 填空题答案：每行一个空，空内多个备选用 | 分隔 */
   blankAnswer?: string;
   judgeAnswer?: string;
 }
@@ -63,7 +64,7 @@ export default function QuestionFormModal({
           question.type === 'single'
             ? question.answer?.[0]
             : question.answer ?? [],
-        blankAnswer: question.blank_answer?.[0] ?? question.answer?.[0] ?? '',
+        blankAnswer: (question.blank_answer ?? question.answer ?? []).join('\n'),
         judgeAnswer: question.answer?.[0],
       });
     } else {
@@ -97,7 +98,10 @@ export default function QuestionFormModal({
     } else if (values.type === 'judge') {
       dto.answer = [values.judgeAnswer!];
     } else if (values.type === 'blank') {
-      dto.blank_answer = [values.blankAnswer!.trim()];
+      dto.blank_answer = (values.blankAnswer ?? '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
     }
 
     await onSubmit(dto);
@@ -199,10 +203,13 @@ export default function QuestionFormModal({
         {type === 'blank' && (
           <Form.Item
             name="blankAnswer"
-            label="正确答案"
+            label="正确答案（每行一个空；同一空的多个备选写法用 | 分隔）"
             rules={[{ required: true, message: '请输入正确答案' }]}
           >
-            <Input placeholder="填空题答案" />
+            <TextArea
+              rows={3}
+              placeholder={'TCP|传输控制协议\n面向连接'}
+            />
           </Form.Item>
         )}
       </Form>

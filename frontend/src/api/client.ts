@@ -9,8 +9,13 @@ declare module 'axios' {
   }
 }
 
-export const API_BASE =
-  import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+// 桌面打包模式：Tauri 在页面脚本执行前注入 window.__BACKEND_PORT__（后端实际端口）
+const backendPort = (window as unknown as { __BACKEND_PORT__?: number })
+  .__BACKEND_PORT__;
+
+export const API_BASE = backendPort
+  ? `http://127.0.0.1:${backendPort}`
+  : import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 export const client = axios.create({
   baseURL: API_BASE,

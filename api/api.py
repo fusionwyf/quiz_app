@@ -1,4 +1,5 @@
 # api.py
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, UTC
 from typing import List, Optional
@@ -34,9 +35,20 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Quiz App API", version="2.0", lifespan=lifespan)
 
 # ===== CORS（给 React / Tauri 用）=====
+def _cors_origins() -> list[str]:
+    env = os.environ.get("CORS_ORIGINS")
+    if env:
+        return [o.strip() for o in env.split(",") if o.strip()]
+    return [
+        "http://localhost:5173",   # Vite dev
+        "http://tauri.localhost",  # Tauri WebView (Windows)
+        "tauri://localhost",       # Tauri WebView (macOS/Linux)
+    ]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

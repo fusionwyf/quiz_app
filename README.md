@@ -146,12 +146,15 @@ quiz_app_uv/
 │   ├── models.py       # 数据模型和数据库配置
 │   ├── parsers.py      # 题库文件解析（txt/md/docx，键值+试卷双格式）
 │   └── llm.py          # LLM 智能整理（可选，解析失败自动兜底）
+├── backend_main.py     # PyInstaller 打包入口（--host/--port）
+├── quiz-backend.spec   # PyInstaller 配置（含 uvicorn 隐藏导入）
+├── build-desktop.bat   # 一键构建桌面安装包
 ├── tests/              # 后端单元测试
-├── frontend/           # React 前端（见上文“前端”章节）
+├── frontend/           # React 前端 + Tauri 桌面壳（见上文）
+│   └── src-tauri/      # Tauri 工程（sidecar 管理、NSIS 打包）
 ├── API.md              # 详细API文档
 ├── README.md           # 项目说明
-├── pyproject.toml      # 项目配置
-└── database.db         # SQLite数据库文件（自动生成）
+└── pyproject.toml      # 项目配置
 ```
 
 ### 添加新功能
@@ -228,6 +231,26 @@ curl -X GET "http://localhost:8000/session/1/status"
 curl -X GET "http://localhost:8000/stats/questions/1"
 ```
 
+## 🖥️ 桌面应用打包（Tauri）
+
+桌面端 = React 前端（Tauri WebView）+ PyInstaller 冻结的 Python 后端（sidecar 进程）。Tauri 壳负责：选空闲端口拉起后端、健康检查通过后再显示窗口、退出时杀掉后端进程、单实例锁。数据存放在 `%APPDATA%/quiz-app/database.db`。
+
+```bash
+# 一键构建（Windows）
+build-desktop.bat
+# 产物：frontend/src-tauri/target/release/bundle/nsis/quiz-app_0.1.0_x64-setup.exe
+
+# 分步执行
+uv run pyinstaller quiz-backend.spec --noconfirm          # 1. 冻结后端 -> dist/quiz-backend.exe
+copy dist\quiz-backend.exe frontend\src-tauri\binaries\quiz-backend-x86_64-pc-windows-msvc.exe   # 2. 复制为 sidecar（必须带目标三元组后缀）
+cd frontend && npm run tauri build                        # 3. Tauri 打包
+
+# 桌面开发模式（同样需要先完成 1、2）
+cd frontend && npm run tauri dev
+```
+
+要求：Rust 工具链（rustup + MSVC）、Node 18+。改了后端代码后需要重新执行第 1、2 步再打包。
+
 ## 🚢 部署
 
 ### 生产环境部署
@@ -243,8 +266,10 @@ docker run -p 8000:8000 quiz-app
 ### 环境变量配置
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `DATABASE_URL` | `sqlite:///./database.db` | 数据库连接字符串 |
-| `CORS_ORIGINS` | `http://localhost:5173` | 允许的CORS来源 |
+| `CORS_ORIGINS` | `http://localhost:5173,http://tauri.localhost,tauri://localhost` | 允许的CORS来源（逗号分隔） |
+| `LLM_PROVIDER` | `none`（关闭） | `openai`（OpenAI 兼容端点）或 `local`（内嵌 GGUF），详见上文 AI 智能整理 |
+
+> 数据库固定存放在用户数据目录（Windows: `%APPDATA%/quiz-app/database.db`），不再随工作目录变化。
 
 ## 🤝 贡献指南
 

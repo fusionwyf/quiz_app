@@ -89,7 +89,13 @@ export default function BanksPage() {
       </Space>
 
       {banks.length === 0 && !isLoading ? (
-        <Empty description="暂无题库，点击右上角新建" />
+        <Empty description="还没有题库，先建一个开始刷题吧">
+          <Space>
+            <Button type="primary" onClick={() => setCreateOpen(true)}>
+              新建题库
+            </Button>
+          </Space>
+        </Empty>
       ) : (
         <Row gutter={[16, 16]}>
           {banks.map((bank) => (

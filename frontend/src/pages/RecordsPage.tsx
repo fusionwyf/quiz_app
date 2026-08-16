@@ -1,7 +1,9 @@
 // 答题记录页：分页记录表格 + 正确性筛选 + 题目统计弹窗（取数经 TanStack Query）
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
+  Empty,
   Modal,
   Select,
   Space,
@@ -30,6 +32,7 @@ const { Title, Paragraph } = Typography;
 type CorrectFilter = 'all' | 'correct' | 'wrong';
 
 export default function RecordsPage() {
+  const navigate = useNavigate();
   const { token } = theme.useToken();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -155,6 +158,15 @@ export default function RecordsPage() {
         columns={columns}
         dataSource={records}
         loading={isFetching}
+        locale={{
+          emptyText: (
+            <Empty description="还没有答题记录">
+              <Button type="primary" onClick={() => navigate('/quiz/start')}>
+                去刷题
+              </Button>
+            </Empty>
+          ),
+        }}
         pagination={{
           current: page,
           pageSize,

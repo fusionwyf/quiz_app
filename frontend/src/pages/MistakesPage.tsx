@@ -1,5 +1,6 @@
 // 错题本页：错题列表（可按题库筛选）与已掌握移出（取数经 TanStack Query）
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import {
   Button,
@@ -21,6 +22,7 @@ import type { MistakeItem, QuestionType } from '../api/types';
 import { QUESTION_TYPE_LABELS } from '../api/types';
 
 export default function MistakesPage() {
+  const navigate = useNavigate();
   const [bankId, setBankId] = useState<number | undefined>(undefined);
   const { data: banks = [] } = useBanks();
   const { data: mistakes = [], isLoading, refetch } = useMistakeBook(bankId);
@@ -101,7 +103,11 @@ export default function MistakesPage() {
         </Button>
       </Space>
       {mistakes.length === 0 && !isLoading ? (
-        <Empty description="错题本是空的，继续保持" />
+        <Empty description="错题本是空的，继续保持">
+          <Button type="primary" onClick={() => navigate('/quiz/start')}>
+            去刷题
+          </Button>
+        </Empty>
       ) : (
         <Table<MistakeItem>
           rowKey="mistake_id"

@@ -89,10 +89,16 @@ def main():
         raise SystemExit(f"未找到安装包：{exe}")
     if not sig.exists():
         raise SystemExit(f"未找到更新签名文件：{sig}（检查 createUpdaterArtifacts 配置）")
-    print(f"安装包：{exe.name}（{exe.stat().st_size / 1024 / 1024:.1f} MB）")
 
-    # 4) 生成 latest.json（tauri v2 updater 格式）
-    exe_url_name = urllib.parse.quote(exe.name)
+    # 中文产物名经 cmd/gh 链路会被削字符，上传与更新清单一律用 ASCII 别名
+    ascii_exe = nsis_dir / f"quiz-helper_{version}_x64-setup.exe"
+    ascii_sig = nsis_dir / f"{ascii_exe.name}.sig"
+    shutil.copy2(exe, ascii_exe)
+    shutil.copy2(sig, ascii_sig)
+    print(f"安装包：{exe.name}（{exe.stat().st_size / 1024 / 1024:.1f} MB）→ 上传名 {ascii_exe.name}")
+
+    # 4) 生成 latest.json（tauri v2 updater 格式，指向 ASCII 资产名）
+    exe_url_name = urllib.parse.quote(ascii_exe.name)
     latest = {
         "version": version,
         "pub_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -128,7 +134,7 @@ def main():
         "gh", "release", "create", tag,
         "--title", f"{product} {tag}",
         "--notes-file", str(notes_file),
-        str(exe), str(sig), str(latest_path),
+        str(ascii_exe), str(ascii_sig), str(latest_path),
     ])
     print(f"\n发布完成：https://github.com/{REPO}/releases/tag/{tag}")
     print("发布后按 docs/release-checklist.md 做人工验证（升级路径、sidecar 清理等）。")

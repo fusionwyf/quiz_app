@@ -24,6 +24,9 @@ env.bak/
 *.sublime-workspace
 *.sublime-project
 
+# Agent 会话目录
+.zcode/
+
 # OS files
 .DS_Store
 Thumbs.db

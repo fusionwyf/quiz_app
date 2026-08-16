@@ -7,14 +7,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.deps import get_session  # noqa: F401 —— re-export 保持既有导入点稳定
-from api.models import create_db_and_tables
+from api.migrations import run_migrations
+from api.models import engine, create_db_and_tables
 from api.routers import banks, questions, sessions, mistakes, records, llm_config
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时自动建表（已存在则跳过）
-    create_db_and_tables()
+    # 建表（全新库）+ 迁移链升级（旧库）——见 ADR-0003
+    run_migrations(engine)
     yield
 
 

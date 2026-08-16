@@ -1,4 +1,4 @@
-# Quiz App API 文档
+# 「刷题助手」API 文档
 
 > 基于代码（`api/routers/` 各域路由与 `api/models.py`）人工维护。包含：**已实现接口** ✅ 与 **待开发接口** ⚠️。
 

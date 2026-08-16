@@ -1,6 +1,6 @@
 # AGENTS.md
 
-在线答题系统：FastAPI + SQLModel 后端（`api/`）+ React/TypeScript/AntD 前端（`frontend/`）。SQLite 数据库，uv 管理 Python 依赖。
+「刷题助手」：FastAPI + SQLModel 后端（`api/`）+ React/TypeScript/AntD 前端（`frontend/`）。SQLite 数据库，uv 管理 Python 依赖。
 
 ## 常用命令
 

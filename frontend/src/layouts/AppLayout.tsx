@@ -59,7 +59,7 @@ export default function AppLayout() {
             padding: '16px 8px',
           }}
         >
-          {collapsed ? 'Q' : 'Quiz App'}
+          {collapsed ? '刷' : '刷题助手'}
         </div>
         <Menu
           theme="dark"
@@ -79,7 +79,7 @@ export default function AppLayout() {
             borderBottom: '1px solid #f0f0f0',
           }}
         >
-          在线答题系统
+          刷题助手
         </Header>
         <Content style={{ padding: 24, overflow: 'auto' }}>
           <Outlet />

@@ -1,6 +1,6 @@
-# Quiz App API
+# 刷题助手
 
-一个功能完整的在线答题系统后端API，基于FastAPI和SQLModel构建。
+一个本地单用户的刷题桌面软件：FastAPI + SQLModel 后端 + React/AntD 前端 + Tauri 桌面打包。
 
 ## 🚀 功能特性
 

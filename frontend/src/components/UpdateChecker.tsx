@@ -1,47 +1,26 @@
-// 应用内更新检查器（spec P2）：启动后台检查，有新版本时页头出现入口。
-// 仅在 Tauri 桌面环境运行（浏览器 dev 模式自动跳过）；检查失败静默（提供手动下载兜底）。
+// 页头更新入口：启动后台检查，有新版本时页头出现标签，点击确认后升级。
+// 共享逻辑见 src/updates.ts；仅在 Tauri 桌面环境激活，检查失败静默。
 import { useEffect, useState } from 'react';
 import { Modal, Space, Tag, Typography, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-
-const RELEASES_URL = 'https://github.com/fusionwyf/quiz_app/releases';
-
-function isDesktop(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
-
-interface PendingUpdate {
-  version: string;
-  notes?: string;
-  install: () => Promise<void>;
-}
+import { RELEASES_URL, checkForUpdate } from '../updates';
+import type { AppUpdate } from '../updates';
 
 export default function UpdateChecker() {
-  const [pending, setPending] = useState<PendingUpdate | null>(null);
+  const [pending, setPending] = useState<AppUpdate | null>(null);
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
-    if (!isDesktop()) return;
     let cancelled = false;
-    (async () => {
+    import('../updates').then(async ({ isDesktopApp }) => {
+      if (!isDesktopApp()) return;
       try {
-        const { check } = await import('@tauri-apps/plugin-updater');
-        const update = await check();
-        if (!cancelled && update) {
-          setPending({
-            version: update.version,
-            notes: update.body ?? undefined,
-            install: async () => {
-              await update.downloadAndInstall();
-              const { relaunch } = await import('@tauri-apps/plugin-process');
-              await relaunch();
-            },
-          });
-        }
+        const update = await checkForUpdate();
+        if (!cancelled) setPending(update);
       } catch {
-        // 网络失败等：静默，用户可从 README/手动链接获取新版
+        // 网络失败等：静默，用户可从设置页/README 手动获取新版
       }
-    })();
+    });
     return () => {
       cancelled = true;
     };
@@ -52,7 +31,7 @@ export default function UpdateChecker() {
   const handleInstall = async () => {
     setInstalling(true);
     try {
-      await pending.install();
+      await pending.downloadAndRestart();
     } catch {
       message.error('自动更新失败，请到发布页手动下载');
       window.open(RELEASES_URL, '_blank');
@@ -62,40 +41,34 @@ export default function UpdateChecker() {
   };
 
   return (
-    <>
-      <Tag
-        color="processing"
-        style={{ cursor: 'pointer', marginInlineEnd: 0 }}
-        onClick={() => Modal.confirm({ ...confirmProps(pending, handleInstall, installing) })}
-      >
-        <ReloadOutlined /> 新版本 v{pending.version}
-      </Tag>
-    </>
+    <Tag
+      color="processing"
+      style={{ cursor: 'pointer', marginInlineEnd: 0 }}
+      onClick={() =>
+        Modal.confirm({
+          title: `升级到 v${pending.version}？`,
+          content: (
+            <Space direction="vertical">
+              {pending.notes && (
+                <Typography.Paragraph
+                  style={{ whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto', marginBottom: 0 }}
+                >
+                  {pending.notes}
+                </Typography.Paragraph>
+              )}
+              <Typography.Text type="secondary">
+                下载并安装后应用会自动重启；题库与错题数据不受影响。
+              </Typography.Text>
+            </Space>
+          ),
+          okText: '下载并安装',
+          cancelText: '暂不',
+          okButtonProps: { loading: installing },
+          onOk: handleInstall,
+        })
+      }
+    >
+      <ReloadOutlined /> 新版本 v{pending.version}
+    </Tag>
   );
-}
-
-function confirmProps(
-  pending: PendingUpdate,
-  onInstall: () => void,
-  installing: boolean,
-) {
-  return {
-    title: `升级到 v${pending.version}？`,
-    content: (
-      <Space direction="vertical">
-        {pending.notes && (
-          <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto', marginBottom: 0 }}>
-            {pending.notes}
-          </Typography.Paragraph>
-        )}
-        <Typography.Text type="secondary">
-          下载并安装后应用会自动重启；题库与错题数据不受影响。
-        </Typography.Text>
-      </Space>
-    ),
-    okText: '下载并安装',
-    cancelText: '暂不',
-    okButtonProps: { loading: installing },
-    onOk: onInstall,
-  };
 }

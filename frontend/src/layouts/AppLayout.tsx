@@ -1,7 +1,7 @@
 // 侧边菜单布局
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Badge, Layout, Menu, theme } from 'antd';
+import { Badge, Layout, Menu, Space, theme } from 'antd';
 import {
   BookOutlined,
   DashboardOutlined,
@@ -28,12 +28,26 @@ export default function AppLayout() {
     { key: '/quiz/start', icon: <EditOutlined />, label: '开始做题' },
     {
       key: '/mistakes',
-      icon: (
-        <Badge count={mistakeCount} size="small" offset={[8, 0]}>
+      // 收缩态图标出屏：改红点提示；展开态数字放文字后，避免遮挡图标
+      icon: collapsed ? (
+        mistakeCount > 0 ? (
+          <Badge dot>
+            <BookOutlined />
+          </Badge>
+        ) : (
           <BookOutlined />
-        </Badge>
+        )
+      ) : (
+        <BookOutlined />
       ),
-      label: '错题本',
+      label: (
+        <Space size={8}>
+          错题本
+          {mistakeCount > 0 && (
+            <Badge count={mistakeCount} size="small" style={{ boxShadow: 'none' }} />
+          )}
+        </Space>
+      ),
     },
     { key: '/records', icon: <FileTextOutlined />, label: '答题记录' },
     { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },

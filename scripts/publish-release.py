@@ -28,9 +28,15 @@ KEY_PATH = pathlib.Path.home() / ".tauri" / "quiz_app_updater.key"
 
 
 def run(cmd, cwd=None, env=None, check=True):
-    print(f"$ {' '.join(str(c) for c in cmd)}")
+    # Windows 上 npx/gh 等实为 .cmd，CreateProcess 需要带扩展名的完整路径
+    exe = str(cmd[0])
+    if "\\/" not in exe.replace("/", "\\"):
+        resolved = shutil.which(exe)
+        if resolved:
+            exe = resolved
+    print(f"$ {exe} {' '.join(str(c) for c in cmd[1:])}")
     result = subprocess.run(
-        cmd, cwd=cwd, env=env, shell=False,
+        [exe, *cmd[1:]], cwd=cwd, env=env, shell=False,
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if result.stdout.strip():

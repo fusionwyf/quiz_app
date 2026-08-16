@@ -39,6 +39,12 @@ export async function createBank(name: string): Promise<QuestionBank> {
   return data;
 }
 
+/** 一键导入内置示例题库（覆盖四题型；同名已存在 409） */
+export async function importSampleBank(): Promise<QuestionBank> {
+  const { data } = await client.post<QuestionBank>('/banks/import/sample');
+  return data;
+}
+
 /** 删除题库（后端级联删除题目、错题与答题记录） */
 export async function deleteBank(bankId: number): Promise<void> {
   await client.delete(`/banks/${bankId}`);

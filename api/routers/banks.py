@@ -8,6 +8,7 @@ from api.deps import get_session
 from api.models import QuestionBank, Question
 from api.parsers import extract_text, parse_questions, parse_keyvalue_block
 from api.services.banks import delete_bank_cascade
+from api.services import sample_bank
 from api import llm
 
 router = APIRouter()
@@ -60,6 +61,16 @@ def delete_bank(bank_id: int, session: Session = Depends(get_session)):
         raise HTTPException(404, f"QuestionBank with id {bank_id} not found")
     delete_bank_cascade(session, bank)
     return {"message": f"Bank {bank_id} and related data deleted"}
+
+
+@router.post("/banks/import/sample")
+def import_sample_bank_route(session: Session = Depends(get_session)):
+    """一键导入内置示例题库（覆盖全部四种题型，含多空与 | 备选答案）"""
+    try:
+        bank = sample_bank.import_sample_bank(session)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return bank
 
 
 @router.post("/banks/{bank_id}/import")

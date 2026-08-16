@@ -26,6 +26,7 @@ import { createBank, deleteBank, exportUrl } from '../api';
 import { queryKeys, useBanks } from '../api/queries';
 import type { QuestionBank } from '../api/types';
 import ImportModal from '../components/ImportModal';
+import OnboardingModal, { shouldShowOnboarding } from '../components/OnboardingModal';
 
 const { Text } = Typography;
 
@@ -37,6 +38,8 @@ export default function BanksPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [importBank, setImportBank] = useState<QuestionBank | null>(null);
+  // 首次引导：本地未见过引导标记且没有任何题库时展示（AC：完成后不再出现）
+  const [onboardingOpen, setOnboardingOpen] = useState(shouldShowOnboarding);
 
   const createMutation = useMutation({
     mutationFn: createBank,
@@ -173,6 +176,10 @@ export default function BanksPage() {
           </Text>
         )}
       </Modal>
+
+      {onboardingOpen && banks.length === 0 && !isLoading && (
+        <OnboardingModal onClose={() => setOnboardingOpen(false)} />
+      )}
 
       {importBank && (
         <ImportModal

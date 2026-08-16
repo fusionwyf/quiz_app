@@ -61,12 +61,14 @@ export default function AppLayout() {
       )?.key ?? '/';
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    // 应用外壳：外层锁定视口高度，侧边栏与页头固定，只有内容区滚动
+    <Layout style={{ height: '100vh' }}>
       <Sider
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
         theme="dark"
+        style={{ overflow: 'auto' }}
       >
         <div
           style={{
@@ -87,7 +89,7 @@ export default function AppLayout() {
           onClick={({ key }) => navigate(key)}
         />
       </Sider>
-      <Layout>
+      <Layout style={{ overflow: 'hidden' }}>
         <Header
           style={{
             background: token.colorBgContainer,

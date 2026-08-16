@@ -1,6 +1,7 @@
-// 系统设置页：数据备份 + 错题连对出本阈值 + LLM 智能整理 API 配置
+// 系统设置页：数据备份 + 诊断 + 错题连对出本阈值 + LLM 智能整理 API 配置
 import { Card, Typography } from 'antd';
 import BackupCard from '../components/BackupCard';
+import DiagnosticsCard from '../components/DiagnosticsCard';
 import LlmSettingsForm from '../components/LlmSettingsForm';
 import MistakeThresholdForm from '../components/MistakeThresholdForm';
 
@@ -9,6 +10,12 @@ const { Paragraph } = Typography;
 export default function SettingsPage() {
   return (
     <>
+      <Card title="诊断" style={{ maxWidth: 680, marginBottom: 16 }}>
+        <Paragraph type="secondary">
+          后端与桌面壳的运行日志保存在本机应用数据目录（滚动清理）。
+        </Paragraph>
+        <DiagnosticsCard />
+      </Card>
       <Card title="数据备份" style={{ maxWidth: 680, marginBottom: 16 }}>
         <Paragraph type="secondary">
           一键把全部数据备份为单个文件（换电脑/重装时带走），或从备份文件恢复；

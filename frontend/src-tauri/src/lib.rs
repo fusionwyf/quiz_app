@@ -1,8 +1,10 @@
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 
@@ -14,6 +16,15 @@ struct BackendState {
 fn pick_free_port() -> Result<u16, Box<dyn std::error::Error>> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     Ok(listener.local_addr()?.port())
+}
+
+/// 壳日志目录：与后端共享 %APPDATA%/quiz-app/logs，诊断包一并打包（spec P1）
+fn shell_log_dir() -> PathBuf {
+    let dir = std::env::var("APPDATA")
+        .map(|p| PathBuf::from(p).join("quiz-app").join("logs"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("quiz-app-logs"));
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
 
 /// 等待后端端口可连接（onefile 解压 + FastAPI 启动需要几秒）
@@ -31,6 +42,18 @@ fn wait_backend_ready(port: u16) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Folder {
+                        path: shell_log_dir(),
+                        file_name: Some("shell.log".into()),
+                    }),
+                    Target::new(TargetKind::Stdout),
+                ])
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 二次启动时聚焦已有窗口
@@ -64,8 +87,10 @@ pub fn run() {
             });
 
             *app.state::<BackendState>().child.lock().unwrap() = Some(child);
+            log::info!("backend sidecar spawned on port {port}");
 
             wait_backend_ready(port)?;
+            log::info!("backend ready, creating main window");
 
             // 后端就绪后再建窗口；initialization_script 在页面脚本执行前
             // 注入 window.__BACKEND_PORT__，前端 client.ts 会优先使用它
@@ -82,14 +107,14 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app, event| match event {
             RunEvent::ExitRequested { .. } => {
-                eprintln!("[lifecycle] ExitRequested");
+                log::info!("[lifecycle] ExitRequested");
             }
             RunEvent::Exit => {
-                eprintln!("[lifecycle] Exit, killing backend");
+                log::info!("[lifecycle] Exit, killing backend");
                 if let Some(child) = app.state::<BackendState>().child.lock().unwrap().take() {
                     kill_process_tree(child.pid());
                 }
-                eprintln!("[lifecycle] backend killed");
+                log::info!("[lifecycle] backend killed");
                 // 清理完成后强制退出，兜底事件循环可能的挂起
                 std::process::exit(0);
             }

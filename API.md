@@ -316,6 +316,26 @@
 
 ---
 
+### 15) 诊断（本地日志）
+后端（含桌面 sidecar 场景）与 Tauri 壳各写滚动日志到应用数据目录 `logs/`（`backend.log` / `shell.log`，2MB × 3 份滚动）。日志不记录请求体（题目内容）与 LLM API Key 明文，只记级别、路径与异常栈。
+
+- **环境信息**
+  - 方法：GET
+  - 路径：`/diagnostics/info`
+  - 返回：`{"log_dir", "backend_log", "app_version", "python_version", "platform"}`
+
+- **打开日志目录**
+  - 方法：POST
+  - 路径：`/diagnostics/open-folder`
+  - 说明：用系统文件管理器打开日志目录；失败返回 500
+
+- **导出诊断包**
+  - 方法：GET
+  - 路径：`/diagnostics/export`
+  - 返回：zip 附件（`logs/` 全部日志 + `info.json` 版本/系统信息），供用户附到 Issue
+
+---
+
 ## 判题逻辑说明
 - `check_answer` 支持：
   - 单选/多选/判断：集合不分顺序匹配（选项字母统一大写后比较）

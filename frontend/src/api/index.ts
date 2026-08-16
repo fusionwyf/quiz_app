@@ -97,6 +97,30 @@ export function exportUrl(bankId: number, format: 'json' | 'txt'): string {
   return `${API_BASE}/banks/${bankId}/export?format=${format}`;
 }
 
+// ===== 诊断 =====
+
+export interface DiagnosticsInfo {
+  log_dir: string;
+  backend_log: string;
+  app_version: string;
+  python_version: string;
+  platform: string;
+}
+
+export async function getDiagnosticsInfo(): Promise<DiagnosticsInfo> {
+  const { data } = await client.get<DiagnosticsInfo>('/diagnostics/info');
+  return data;
+}
+
+export async function openLogFolder(): Promise<void> {
+  await client.post('/diagnostics/open-folder');
+}
+
+/** 诊断包下载链接（zip：两侧日志 + 版本 + 系统信息） */
+export function diagnosticsExportUrl(): string {
+  return `${API_BASE}/diagnostics/export`;
+}
+
 // ===== LLM 智能整理 =====
 
 export async function getLlmStatus(): Promise<LlmStatus> {

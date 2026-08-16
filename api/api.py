@@ -9,13 +9,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.deps import get_session  # noqa: F401 —— re-export 保持既有导入点稳定
 from api.migrations import run_migrations
 from api.models import engine
-from api.routers import banks, questions, sessions, mistakes, records, llm_config, backup
+from api.routers import banks, questions, sessions, mistakes, records, llm_config, backup, diagnostics
 from api.services import backup as backup_service
+from api.services import diagnostics as diagnostics_service
 from sqlmodel import Session
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 滚动文件日志最先就位，后续启动步骤异常都可追溯（spec P1）
+    diagnostics_service.configure_logging()
+    diagnostics_service.log_startup("2.0")
     # 建表（全新库）+ 迁移链升级（旧库）——见 ADR-0003
     run_migrations(engine)
     # 每日首次启动自动备份（保留最近 7 份，失败不阻断启动）
@@ -58,3 +62,4 @@ app.include_router(mistakes.router)
 app.include_router(records.router)
 app.include_router(llm_config.router)
 app.include_router(backup.router)
+app.include_router(diagnostics.router)

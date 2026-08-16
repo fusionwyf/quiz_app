@@ -7,5 +7,9 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // tauri build 的 Rust 产物在 src-tauri/target 里海量写入，watch 会 EBUSY 崩溃
+      ignored: ['**/src-tauri/**'],
+    },
   },
 });

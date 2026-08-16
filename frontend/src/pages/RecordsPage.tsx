@@ -1,5 +1,5 @@
-// 答题记录页：分页记录表格 + 正确性筛选 + 题目统计弹窗
-import { useCallback, useEffect, useState } from 'react';
+// 答题记录页：分页记录表格 + 正确性筛选 + 题目统计弹窗（取数经 TanStack Query）
+import { useState } from 'react';
 import {
   Button,
   Modal,
@@ -14,7 +14,9 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { BarChartOutlined, ReloadOutlined } from '@ant-design/icons';
-import { getQuestionStats, getRecords } from '../api';
+import { getQuestionStats } from '../api';
+import { useRecords } from '../api/queries';
+import { TYPE_COLORS } from '../constants';
 import type {
   ExamRecordItem,
   QuestionStats,
@@ -24,57 +26,24 @@ import { QUESTION_TYPE_LABELS } from '../api/types';
 
 const { Title, Paragraph } = Typography;
 
-const TYPE_COLORS: Record<QuestionType, string> = {
-  single: 'blue',
-  multi: 'purple',
-  judge: 'cyan',
-  blank: 'orange',
-};
-
 type CorrectFilter = 'all' | 'correct' | 'wrong';
 
 export default function RecordsPage() {
-  const [records, setRecords] = useState<ExamRecordItem[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [filter, setFilter] = useState<CorrectFilter>('all');
-  const [loading, setLoading] = useState(true);
+
+  const { data, isFetching, refetch } = useRecords({
+    page,
+    page_size: pageSize,
+    is_correct: filter === 'all' ? undefined : filter === 'correct',
+  });
+  const records = data?.records ?? [];
+  const total = data?.total ?? 0;
 
   const [statsOpen, setStatsOpen] = useState(false);
   const [stats, setStats] = useState<QuestionStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-
-  const load = useCallback(
-    async (signal?: AbortSignal) => {
-      setLoading(true);
-      try {
-        const data = await getRecords(
-          {
-            page,
-            page_size: pageSize,
-            is_correct:
-              filter === 'all' ? undefined : filter === 'correct',
-          },
-          signal,
-        );
-        setRecords(data.records);
-        setTotal(data.total);
-      } catch {
-        // 忽略（含过期请求取消）
-      } finally {
-        if (!signal?.aborted) setLoading(false);
-      }
-    },
-    [page, pageSize, filter],
-  );
-
-  useEffect(() => {
-    // 分页/筛选变化或组件重新挂载时取消过期请求，避免旧响应覆盖新数据
-    const controller = new AbortController();
-    load(controller.signal);
-    return () => controller.abort();
-  }, [load]);
 
   const showStats = async (questionId: number) => {
     setStatsOpen(true);
@@ -175,7 +144,7 @@ export default function RecordsPage() {
             setPage(1);
           }}
         />
-        <Button icon={<ReloadOutlined />} onClick={() => load()}>
+        <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
           刷新
         </Button>
       </Space>
@@ -183,7 +152,7 @@ export default function RecordsPage() {
         rowKey="id"
         columns={columns}
         dataSource={records}
-        loading={loading}
+        loading={isFetching}
         pagination={{
           current: page,
           pageSize,

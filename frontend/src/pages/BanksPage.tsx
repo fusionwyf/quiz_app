@@ -1,6 +1,7 @@
-// 题库管理页：题库列表、创建、导入导出、删除
-import { useCallback, useEffect, useState } from 'react';
+// 题库管理页：题库列表、创建、导入导出、删除（取数经 TanStack Query）
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
   Card,
@@ -21,7 +22,8 @@ import {
   PlusOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
-import { createBank, deleteBank, exportUrl, listBanks } from '../api';
+import { createBank, deleteBank, exportUrl } from '../api';
+import { queryKeys, useBanks } from '../api/queries';
 import type { QuestionBank } from '../api/types';
 import ImportModal from '../components/ImportModal';
 
@@ -29,70 +31,48 @@ const { Text } = Typography;
 
 export default function BanksPage() {
   const navigate = useNavigate();
-  const [banks, setBanks] = useState<QuestionBank[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
+  const { data: banks = [], isLoading } = useBanks();
+
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
-  const [creating, setCreating] = useState(false);
   const [importBank, setImportBank] = useState<QuestionBank | null>(null);
 
-  const loadBanks = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    try {
-      const list = await listBanks(signal);
-      if (!signal?.aborted) setBanks(list);
-    } catch {
-      // 错误提示已由拦截器处理
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, []);
+  const createMutation = useMutation({
+    mutationFn: createBank,
+    onSuccess: (created) => {
+      message.success('题库创建成功，马上导入题目吧');
+      setCreateOpen(false);
+      setNewName('');
+      qc.invalidateQueries({ queryKey: queryKeys.banks });
+      // 创建后直接进入导入流程，省去再找一遍题库卡片
+      setImportBank(created);
+    },
+  });
 
-  useEffect(() => {
-    // 组件卸载/重新挂载时取消过期请求，避免旧响应覆盖新数据
-    const controller = new AbortController();
-    loadBanks(controller.signal);
-    return () => controller.abort();
-  }, [loadBanks]);
+  const deleteMutation = useMutation({
+    mutationFn: (bankId: number) => deleteBank(bankId),
+    onSuccess: (_data, bankId) => {
+      const bank = banks.find((b) => b.id === bankId);
+      message.success(`题库「${bank?.name ?? bankId}」已删除`);
+      qc.invalidateQueries({ queryKey: queryKeys.banks });
+    },
+  });
 
   // 创建弹窗重名预检（后端 409 为最终兜底）
   const trimmed = newName.trim();
   const duplicate = trimmed !== '' && banks.some((b) => b.name === trimmed);
 
-  const handleCreate = async () => {
-    const name = trimmed;
-    if (!name) {
+  const handleCreate = () => {
+    if (!trimmed) {
       message.warning('请输入题库名称');
       return;
     }
-    setCreating(true);
-    try {
-      const created = await createBank(name);
-      message.success('题库创建成功，马上导入题目吧');
-      setCreateOpen(false);
-      setNewName('');
-      loadBanks();
-      // 创建后直接进入导入流程，省去再找一遍题库卡片
-      setImportBank(created);
-    } catch {
-      // 错误提示已由拦截器处理（如 409 重名）
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleDelete = async (bank: QuestionBank) => {
-    try {
-      await deleteBank(bank.id);
-      message.success(`题库「${bank.name}」已删除`);
-      loadBanks();
-    } catch {
-      // 错误提示已由拦截器处理
-    }
+    createMutation.mutate(trimmed);
   };
 
   return (
-    <Spin spinning={loading}>
+    <Spin spinning={isLoading}>
       <Space
         style={{ width: '100%', justifyContent: 'space-between', marginBottom: 16 }}
       >
@@ -108,7 +88,7 @@ export default function BanksPage() {
         </Button>
       </Space>
 
-      {banks.length === 0 && !loading ? (
+      {banks.length === 0 && !isLoading ? (
         <Empty description="暂无题库，点击右上角新建" />
       ) : (
         <Row gutter={[16, 16]}>
@@ -148,7 +128,7 @@ export default function BanksPage() {
                     okText="删除"
                     okButtonProps={{ danger: true }}
                     cancelText="取消"
-                    onConfirm={() => handleDelete(bank)}
+                    onConfirm={() => deleteMutation.mutate(bank.id)}
                   >
                     <Button type="link" danger icon={<DeleteOutlined />}>
                       删除
@@ -170,7 +150,7 @@ export default function BanksPage() {
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={handleCreate}
-        confirmLoading={creating}
+        confirmLoading={createMutation.isPending}
         okButtonProps={{ disabled: !trimmed || duplicate }}
         okText="创建"
         cancelText="取消"
@@ -194,7 +174,6 @@ export default function BanksPage() {
           bankId={importBank.id}
           bankName={importBank.name}
           onClose={() => setImportBank(null)}
-          onSuccess={loadBanks}
         />
       )}
     </Spin>

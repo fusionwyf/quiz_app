@@ -1,5 +1,6 @@
 // 题库文件导入弹窗：拖拽上传 txt / md / docx，展示导入结果
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Button,
@@ -16,7 +17,8 @@ import {
 import { InboxOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd';
 import { getLlmStatus, importQuestionsFile } from '../api';
-import type { ImportResult, LlmStatus } from '../api/types';
+import { queryKeys } from '../api/queries';
+import type { ImportResult } from '../api/types';
 import LlmSettingsForm from './LlmSettingsForm';
 
 const { Dragger } = Upload;
@@ -30,7 +32,6 @@ interface ImportModalProps {
   bankId: number;
   bankName: string;
   onClose: () => void;
-  onSuccess: () => void;
 }
 
 export default function ImportModal({
@@ -38,25 +39,29 @@ export default function ImportModal({
   bankId,
   bankName,
   onClose,
-  onSuccess,
 }: ImportModalProps) {
+  const qc = useQueryClient();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
-  const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
   const [forceLlm, setForceLlm] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
-  const loadLlmStatus = useCallback(() => {
-    getLlmStatus()
-      .then(setLlmStatus)
-      .catch(() => {});
-  }, []);
-
   // 弹窗打开时查询 LLM 智能整理状态（失败静默）
-  useEffect(() => {
-    if (open) loadLlmStatus();
-  }, [open, loadLlmStatus]);
+  const { data: llmStatus } = useQuery({
+    queryKey: queryKeys.llmStatus,
+    queryFn: getLlmStatus,
+    enabled: open,
+  });
+
+  const importMutation = useMutation({
+    mutationFn: (file: File) => importQuestionsFile(bankId, file, forceLlm),
+    onSuccess: (res) => {
+      setResult(res);
+      // 无论导入几题（含全部判重跳过）都刷新列表缓存，防止计数过期
+      qc.invalidateQueries({ queryKey: queryKeys.banks });
+      qc.invalidateQueries({ queryKey: ['questions'] });
+    },
+  });
 
   const handleClose = () => {
     setFileList([]);
@@ -65,24 +70,13 @@ export default function ImportModal({
     onClose();
   };
 
-  const handleImport = async () => {
+  const handleImport = () => {
     const raw = fileList[0]?.originFileObj;
     if (!raw) {
       message.warning('请先选择文件');
       return;
     }
-    setUploading(true);
-    try {
-      const res = await importQuestionsFile(bankId, raw as File, forceLlm);
-      setResult(res);
-      if (res.imported_count > 0) {
-        onSuccess();
-      }
-    } catch {
-      // 错误提示已由 axios 拦截器统一处理
-    } finally {
-      setUploading(false);
-    }
+    importMutation.mutate(raw as File);
   };
 
   return (
@@ -100,7 +94,7 @@ export default function ImportModal({
             <Button onClick={handleClose}>关闭</Button>
             <Button
               type="primary"
-              loading={uploading}
+              loading={importMutation.isPending}
               disabled={fileList.length === 0}
               onClick={handleImport}
             >
@@ -235,7 +229,7 @@ export default function ImportModal({
         <LlmSettingsForm
           onSaved={() => {
             setConfigOpen(false);
-            loadLlmStatus();
+            qc.invalidateQueries({ queryKey: queryKeys.llmStatus });
           }}
         />
       </Modal>

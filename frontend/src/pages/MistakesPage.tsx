@@ -1,5 +1,6 @@
-// 错题本页：错题列表（可按题库筛选）与已掌握移出
-import { useCallback, useEffect, useState } from 'react';
+// 错题本页：错题列表（可按题库筛选）与已掌握移出（取数经 TanStack Query）
+import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import {
   Button,
   Empty,
@@ -13,57 +14,21 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { ReloadOutlined } from '@ant-design/icons';
-import { getMistakeBook, listBanks, markMastered } from '../api';
-import type { MistakeItem, QuestionBank, QuestionType } from '../api/types';
+import { markMastered } from '../api';
+import { useBanks, useMistakeBook } from '../api/queries';
+import { TYPE_COLORS } from '../constants';
+import type { MistakeItem, QuestionType } from '../api/types';
 import { QUESTION_TYPE_LABELS } from '../api/types';
 
-const TYPE_COLORS: Record<QuestionType, string> = {
-  single: 'blue',
-  multi: 'purple',
-  judge: 'cyan',
-  blank: 'orange',
-};
-
 export default function MistakesPage() {
-  const [mistakes, setMistakes] = useState<MistakeItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [banks, setBanks] = useState<QuestionBank[]>([]);
   const [bankId, setBankId] = useState<number | undefined>(undefined);
+  const { data: banks = [] } = useBanks();
+  const { data: mistakes = [], isLoading, refetch } = useMistakeBook(bankId);
 
-  const load = useCallback(async (signal?: AbortSignal, bank?: number) => {
-    setLoading(true);
-    try {
-      const list = await getMistakeBook(bank, signal);
-      setMistakes(list);
-    } catch {
-      // 忽略（含过期请求取消）
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // 组件卸载/重新挂载时取消过期请求，避免旧响应覆盖新数据
-    const controller = new AbortController();
-    load(controller.signal, bankId);
-    return () => controller.abort();
-  }, [load, bankId]);
-
-  useEffect(() => {
-    listBanks()
-      .then(setBanks)
-      .catch(() => {});
-  }, []);
-
-  const handleMastered = async (questionId: number) => {
-    try {
-      await markMastered(questionId);
-      message.success('已掌握，移出错题本');
-      load(undefined, bankId);
-    } catch {
-      // ignore
-    }
-  };
+  const masteredMutation = useMutation({
+    mutationFn: (questionId: number) => markMastered(questionId),
+    onSuccess: () => message.success('已掌握，移出错题本'),
+  });
 
   const columns: ColumnsType<MistakeItem> = [
     { title: '题目ID', dataIndex: 'question_id', width: 80 },
@@ -103,7 +68,7 @@ export default function MistakesPage() {
       render: (_, record) => (
         <Popconfirm
           title="确认已掌握这道题？"
-          onConfirm={() => handleMastered(record.question_id)}
+          onConfirm={() => masteredMutation.mutate(record.question_id)}
           okText="已掌握"
           cancelText="取消"
         >
@@ -131,21 +96,18 @@ export default function MistakesPage() {
             options={banks.map((b) => ({ value: b.id, label: b.name }))}
           />
         </Space>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={() => load(undefined, bankId)}
-        >
+        <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
           刷新
         </Button>
       </Space>
-      {mistakes.length === 0 && !loading ? (
+      {mistakes.length === 0 && !isLoading ? (
         <Empty description="错题本是空的，继续保持" />
       ) : (
         <Table<MistakeItem>
           rowKey="mistake_id"
           columns={columns}
           dataSource={mistakes}
-          loading={loading}
+          loading={isLoading}
           pagination={{ pageSize: 20, showSizeChanger: false }}
         />
       )}

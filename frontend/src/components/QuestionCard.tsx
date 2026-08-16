@@ -13,6 +13,7 @@ import {
 } from 'antd';
 import type { CheckResult, QuestionDTO } from '../api/types';
 import { QUESTION_TYPE_LABELS } from '../api/types';
+import { TYPE_COLORS } from '../constants';
 
 const { Paragraph } = Typography;
 
@@ -23,13 +24,6 @@ interface QuestionCardProps {
   /** 提交后传入判题结果，卡片进入只读反馈态 */
   result?: CheckResult | null;
 }
-
-const TYPE_COLORS: Record<string, string> = {
-  single: 'blue',
-  multi: 'purple',
-  judge: 'cyan',
-  blank: 'orange',
-};
 
 export default function QuestionCard({
   question,

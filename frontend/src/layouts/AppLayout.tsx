@@ -1,7 +1,7 @@
 // 侧边菜单布局
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Layout, Menu } from 'antd';
+import { Badge, Layout, Menu } from 'antd';
 import {
   BookOutlined,
   DatabaseOutlined,
@@ -9,28 +9,37 @@ import {
   FileTextOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
+import { useMistakeCount } from '../api/queries';
 
 const { Sider, Content, Header } = Layout;
-
-const menuItems = [
-  { key: '/', icon: <DatabaseOutlined />, label: '题库管理' },
-  { key: '/quiz/start', icon: <EditOutlined />, label: '开始做题' },
-  { key: '/mistakes', icon: <BookOutlined />, label: '错题本' },
-  { key: '/records', icon: <FileTextOutlined />, label: '答题记录' },
-  { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
-];
 
 export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const mistakeCount = useMistakeCount();
+
+  const menuItems = [
+    { key: '/', icon: <DatabaseOutlined />, label: '题库管理' },
+    { key: '/quiz/start', icon: <EditOutlined />, label: '开始做题' },
+    {
+      key: '/mistakes',
+      icon: (
+        <Badge count={mistakeCount} size="small" offset={[8, 0]}>
+          <BookOutlined />
+        </Badge>
+      ),
+      label: '错题本',
+    },
+    { key: '/records', icon: <FileTextOutlined />, label: '答题记录' },
+    { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
+  ];
 
   // 子路由高亮父级菜单（做题相关页面统一高亮“开始做题”）
   const selectedKey = location.pathname.startsWith('/quiz')
     ? '/quiz/start'
     : menuItems.find(
-        (item) =>
-          item.key !== '/' && location.pathname.startsWith(item.key),
+        (item) => item.key !== '/' && location.pathname.startsWith(item.key),
       )?.key ?? '/';
 
   return (

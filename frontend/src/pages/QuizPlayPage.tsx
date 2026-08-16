@@ -1,6 +1,7 @@
 // 答题页：当前题目、提交判题、进度展示、完成总结
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Button,
   Card,
@@ -34,6 +35,7 @@ type Phase = 'playing' | 'done';
 export default function QuizPlayPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const sessionIdNum = Number(sessionId);
 
   const [phase, setPhase] = useState<Phase>('playing');
@@ -75,6 +77,8 @@ export default function QuizPlayPage() {
           user_choices: choices,
         });
         setResult(res);
+        // 答错自动入本/连对出本 → 刷新错题缓存（侧边栏角标、错题本页随之更新）
+        qc.invalidateQueries({ queryKey: ['mistakes'] });
         const st = await getSessionStatus(sessionIdNum);
         setStatus(st);
       } catch {

@@ -1,32 +1,25 @@
 // 开始做题页：选择题库、题源（全部/错题）与题序（顺序/随机），创建 Session
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Form, Radio, Select, Space, Typography } from 'antd';
-import { listBanks, startSession } from '../api';
-import type { QuestionBank } from '../api/types';
+import { startSession } from '../api';
+import { useBanks } from '../api/queries';
 
 export default function QuizStartPage() {
   const navigate = useNavigate();
-  const [banks, setBanks] = useState<QuestionBank[]>([]);
+  const { data: banks = [] } = useBanks();
   const [bankId, setBankId] = useState<number | undefined>();
   const [source, setSource] = useState<'normal' | 'mistake'>('normal');
   const [mode, setMode] = useState<'sequential' | 'random'>('sequential');
   const [starting, setStarting] = useState(false);
 
-  useEffect(() => {
-    listBanks()
-      .then((list) => {
-        setBanks(list);
-        if (list.length > 0) setBankId(list[0].id);
-      })
-      .catch(() => {});
-  }, []);
+  const effectiveBankId = bankId ?? (banks.length > 0 ? banks[0].id : undefined);
 
   const handleStart = async () => {
-    if (bankId === undefined) return;
+    if (effectiveBankId === undefined) return;
     setStarting(true);
     try {
-      const session = await startSession(bankId, mode, source);
+      const session = await startSession(effectiveBankId, mode, source);
       navigate(`/quiz/session/${session.id}`);
     } catch {
       // 错误提示已由拦截器处理（如题库无题/暂无错题返回 404）
@@ -45,7 +38,7 @@ export default function QuizStartPage() {
           <Form.Item label="选择题库" required>
             <Select
               placeholder="请选择题库"
-              value={bankId}
+              value={effectiveBankId}
               onChange={setBankId}
               options={banks.map((b) => ({ value: b.id, label: b.name }))}
             />
@@ -78,7 +71,7 @@ export default function QuizStartPage() {
           size="large"
           block
           loading={starting}
-          disabled={bankId === undefined}
+          disabled={effectiveBankId === undefined}
           onClick={handleStart}
         >
           开始

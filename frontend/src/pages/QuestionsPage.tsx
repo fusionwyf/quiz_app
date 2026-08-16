@@ -1,11 +1,11 @@
-// 题目管理页：题库内题目表格 + 新增/编辑/删除
-import { useCallback, useEffect, useState } from 'react';
+// 题目管理页：题库内题目表格 + 新增/编辑/删除（取数经 TanStack Query，服务端分页）
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
   Popconfirm,
   Space,
-  Spin,
   Table,
   Tag,
   Typography,
@@ -19,6 +19,8 @@ import {
   listQuestions,
   updateQuestion,
 } from '../api';
+import { queryKeys } from '../api/queries';
+import { TYPE_COLORS } from '../constants';
 import type {
   CreateQuestionDTO,
   Question,
@@ -27,83 +29,59 @@ import type {
 import { QUESTION_TYPE_LABELS } from '../api/types';
 import QuestionFormModal from '../components/QuestionFormModal';
 
-const TYPE_COLORS: Record<QuestionType, string> = {
-  single: 'blue',
-  multi: 'purple',
-  judge: 'cyan',
-  blank: 'orange',
-};
-
 export default function QuestionsPage() {
   const { bankId } = useParams<{ bankId: string }>();
   const navigate = useNavigate();
   const bankIdNum = Number(bankId);
+  const qc = useQueryClient();
 
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [bankName, setBankName] = useState('');
-  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Question | null>(null);
-  const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const pageSize = 20;
 
-  const loadQuestions = useCallback(
-    async (pageArg: number = 1) => {
-      setLoading(true);
-      try {
-        const res = await listQuestions(bankIdNum, pageArg, pageSize);
-        setQuestions(res.questions);
-        setBankName(res.bank_name);
-        setTotal(res.total);
-        setPage(res.page);
-      } catch {
-        setQuestions([]);
-        setTotal(0);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [bankIdNum],
-  );
+  const { data, isFetching } = useQuery({
+    queryKey: queryKeys.questions(bankIdNum, page, pageSize),
+    queryFn: () => listQuestions(bankIdNum, page, pageSize),
+  });
+  const questions = data?.questions ?? [];
+  const total = data?.total ?? 0;
+  const bankName = data?.bank_name ?? '';
 
-  useEffect(() => {
-    loadQuestions();
-  }, [loadQuestions]);
+  const invalidateLists = () => {
+    qc.invalidateQueries({ queryKey: ['questions'] });
+    qc.invalidateQueries({ queryKey: queryKeys.banks }); // 题目计数变化
+  };
 
-  const handleSubmit = async (dto: CreateQuestionDTO) => {
-    setSaving(true);
-    try {
+  const saveMutation = useMutation({
+    mutationFn: (dto: CreateQuestionDTO) => {
       if (editing) {
         const { bank_id, ...rest } = dto;
         void bank_id;
-        await updateQuestion(editing.id, rest);
-        message.success('题目已更新');
-      } else {
-        await createQuestion(dto);
-        message.success('题目已创建');
+        return updateQuestion(editing.id, rest);
       }
+      return createQuestion(dto);
+    },
+    onSuccess: () => {
+      message.success(editing ? '题目已更新' : '题目已创建');
       setModalOpen(false);
       setEditing(null);
-      loadQuestions(page);
-    } catch {
-      // 错误提示已由拦截器处理
-    } finally {
-      setSaving(false);
-    }
-  };
+      invalidateLists();
+    },
+  });
 
-  const handleDelete = async (id: number) => {
-    try {
-      await deleteQuestion(id);
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteQuestion(id),
+    onSuccess: () => {
       message.success('题目已删除');
       // 删掉本页最后一条时回退一页，避免停留在空页
-      const targetPage = questions.length === 1 && page > 1 ? page - 1 : page;
-      loadQuestions(targetPage);
-    } catch {
-      // ignore
-    }
+      if (questions.length === 1 && page > 1) setPage(page - 1);
+      invalidateLists();
+    },
+  });
+
+  const handleSubmit = async (dto: CreateQuestionDTO) => {
+    saveMutation.mutate(dto);
   };
 
   const columns: ColumnsType<Question> = [
@@ -154,7 +132,7 @@ export default function QuestionsPage() {
           </Button>
           <Popconfirm
             title="确定删除该题目？"
-            onConfirm={() => handleDelete(record.id)}
+            onConfirm={() => deleteMutation.mutate(record.id)}
             okText="删除"
             cancelText="取消"
           >
@@ -168,7 +146,7 @@ export default function QuestionsPage() {
   ];
 
   return (
-    <Spin spinning={loading}>
+    <>
       <Space
         style={{ width: '100%', justifyContent: 'space-between', marginBottom: 16 }}
       >
@@ -199,13 +177,13 @@ export default function QuestionsPage() {
         rowKey="id"
         columns={columns}
         dataSource={questions}
-        loading={loading}
+        loading={isFetching}
         pagination={{
           current: page,
           pageSize,
           total,
           showSizeChanger: false,
-          onChange: (p) => loadQuestions(p),
+          onChange: (p) => setPage(p),
         }}
       />
 
@@ -221,7 +199,6 @@ export default function QuestionsPage() {
           onSubmit={handleSubmit}
         />
       )}
-      {saving && <Spin />}
-    </Spin>
+    </>
   );
 }

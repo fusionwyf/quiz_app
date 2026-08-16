@@ -50,3 +50,17 @@ Windows 环境：shell 为 cmd，`ls`/`tail` 不可用，用 `dir`、`findstr`�
 - 数据库默认 `sqlite:///./database.db`（`DATABASE_URL` 可改），自动生成勿提交。
 - LLM 整理默认在解析结果为 0 题时触发（`force_llm=true` 时强制），长文本按空行分块（≤8000 字符/块，上限 40 块）逐块整理；输出仍经解析器校验，失败自动回退并在响应 `ai_error` 说明原因。
 - 提交信息使用中文 conventional 风格（如 `feat(api): ...`、`fix: ...`）。
+
+## Agent skills
+
+### Issue tracker
+
+Issues 与 PRD 以 GitHub Issues 跟踪，通过 `gh` CLI 操作。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+使用五个默认 triage 标签（needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix）。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+单上下文布局：根 `CONTEXT.md`（词汇表）+ `docs/adr/`。See `docs/agents/domain.md`.

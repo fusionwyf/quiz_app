@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 
 from api.constants import QUESTION_TYPES
 from api.deps import get_session
@@ -10,6 +10,53 @@ from api.models import QuestionBank, Question
 from api.schemas import QuestionDTO
 
 router = APIRouter()
+
+MAX_PAGE_SIZE = 100
+DEFAULT_PAGE_SIZE = 20
+
+
+@router.get("/banks/{bank_id}/questions")
+def list_questions(
+    bank_id: int,
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    session: Session = Depends(get_session),
+):
+    """题库题目分页列表（题目管理页数据源；空题库返回 total=0 而非 404）"""
+    bank = session.get(QuestionBank, bank_id)
+    if not bank:
+        raise HTTPException(404, f"QuestionBank with id {bank_id} not found")
+
+    page = max(1, page)
+    page_size = min(max(1, page_size), MAX_PAGE_SIZE)
+
+    base = select(Question).where(Question.bank_id == bank_id)
+    total = session.exec(select(func.count()).select_from(base.subquery())).first()
+    rows = session.exec(
+        base.order_by(Question.id).offset((page - 1) * page_size).limit(page_size)
+    ).all()
+
+    return {
+        "bank_id": bank_id,
+        "bank_name": bank.name,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "questions": [
+            {
+                "id": q.id,
+                "bank_id": q.bank_id,
+                "type": q.type,
+                "content": q.content,
+                "options": q.options,
+                "answer": q.answer,
+                "blank_answer": q.blank_answer,
+                "score": q.score,
+                "created_at": q.created_at,
+            }
+            for q in rows
+        ],
+    }
 
 
 class CreateQuestionDTO(BaseModel):

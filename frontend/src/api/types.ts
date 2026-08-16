@@ -51,6 +51,16 @@ export interface ExportResult {
   questions: Question[];
 }
 
+/** GET /banks/{id}/questions 分页列表（题目管理页数据源） */
+export interface QuestionListResult {
+  bank_id: number;
+  bank_name: string;
+  total: number;
+  page: number;
+  page_size: number;
+  questions: Question[];
+}
+
 export interface CreateQuestionDTO {
   bank_id: number;
   type: QuestionType;

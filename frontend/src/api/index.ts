@@ -15,6 +15,7 @@ import type {
   Question,
   QuestionBank,
   QuestionDTO,
+  QuestionListResult,
   QuestionStats,
   QuizSession,
   SessionStatus,
@@ -63,7 +64,20 @@ export async function importQuestionsFile(
   return data;
 }
 
-/** 导出题库（返回完整题目数组，题目管理页复用为列表数据源；silent 时失败不弹提示） */
+/** 题库题目分页列表（题目管理页数据源；空题库返回 total=0，失败不弹提示） */
+export async function listQuestions(
+  bankId: number,
+  page = 1,
+  pageSize = 20,
+): Promise<QuestionListResult> {
+  const { data } = await client.get<QuestionListResult>(
+    `/banks/${bankId}/questions`,
+    { params: { page, page_size: pageSize }, silent: true },
+  );
+  return data;
+}
+
+/** 导出题库（返回完整题目数组；silent 时失败不弹提示） */
 export async function exportQuestions(
   bankId: number,
   options?: { silent?: boolean; signal?: AbortSignal },

@@ -112,6 +112,13 @@
 > `GET /records/mistakes`（由答题记录派生的视图）**已废除**：错题本统一以 `Mistake` 表为唯一事实源，答错自动入本，见「10) 错题本管理」。
 
 ### 8) 核心题目 CRUD
+- **题目分页列表**
+  - 方法：GET
+  - 路径：`/banks/{bank_id}/questions`
+  - 查询参数：`page: int = 1`，`page_size: int = 20`（上限 100，非法值自动钳制）
+  - 返回：`{"bank_id", "bank_name", "total", "page", "page_size", "questions": [...]}`；题目含完整字段（`options` / `answer` / `blank_answer` / `score` / `created_at`），供题目管理页与编辑弹窗使用
+  - 错误：题库不存在 404；**空题库返回 `total=0` 而非 404**
+
 - **添加题目**
   - 方法：POST
   - 路径：`/questions`

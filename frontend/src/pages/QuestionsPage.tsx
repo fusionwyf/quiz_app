@@ -16,7 +16,7 @@ import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   createQuestion,
   deleteQuestion,
-  exportQuestions,
+  listQuestions,
   updateQuestion,
 } from '../api';
 import type {
@@ -45,20 +45,28 @@ export default function QuestionsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Question | null>(null);
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 20;
 
-  const loadQuestions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await exportQuestions(bankIdNum, { silent: true });
-      setQuestions(res.questions);
-      setBankName(res.bank_name);
-    } catch {
-      // 空题库 export 返回 404，按空列表处理
-      setQuestions([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [bankIdNum]);
+  const loadQuestions = useCallback(
+    async (pageArg: number = 1) => {
+      setLoading(true);
+      try {
+        const res = await listQuestions(bankIdNum, pageArg, pageSize);
+        setQuestions(res.questions);
+        setBankName(res.bank_name);
+        setTotal(res.total);
+        setPage(res.page);
+      } catch {
+        setQuestions([]);
+        setTotal(0);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [bankIdNum],
+  );
 
   useEffect(() => {
     loadQuestions();
@@ -78,7 +86,7 @@ export default function QuestionsPage() {
       }
       setModalOpen(false);
       setEditing(null);
-      loadQuestions();
+      loadQuestions(page);
     } catch {
       // 错误提示已由拦截器处理
     } finally {
@@ -90,7 +98,9 @@ export default function QuestionsPage() {
     try {
       await deleteQuestion(id);
       message.success('题目已删除');
-      loadQuestions();
+      // 删掉本页最后一条时回退一页，避免停留在空页
+      const targetPage = questions.length === 1 && page > 1 ? page - 1 : page;
+      loadQuestions(targetPage);
     } catch {
       // ignore
     }
@@ -170,7 +180,7 @@ export default function QuestionsPage() {
             返回
           </Button>
           <Typography.Title level={4} style={{ margin: 0 }}>
-            {bankName || '题目管理'}（{questions.length} 题）
+            {bankName || '题目管理'}（{total} 题）
           </Typography.Title>
         </Space>
         <Button
@@ -189,7 +199,14 @@ export default function QuestionsPage() {
         rowKey="id"
         columns={columns}
         dataSource={questions}
-        pagination={{ pageSize: 20, showSizeChanger: false }}
+        loading={loading}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          showSizeChanger: false,
+          onChange: (p) => loadQuestions(p),
+        }}
       />
 
       {modalOpen && (

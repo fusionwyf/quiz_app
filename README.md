@@ -1,290 +1,83 @@
 # 刷题助手
 
-一个本地单用户的刷题桌面软件：FastAPI + SQLModel 后端 + React/AntD 前端 + Tauri 桌面打包。
+一个**本地、免费、离线**的刷题桌面软件（Windows）：导入你自己的题库文件，顺序 / 随机 / 错题三种方式练习，答错自动进错题本、连对自动出本，复习进度一目了然。
 
-## 🚀 功能特性
+> 数据全部保存在你自己电脑上（无账号、无云端、不上传任何数据）。
 
-- **题库管理**：创建、查看题库
-- **题目CRUD**：完整的题目增删改查功能
-- **智能出题**：支持随机出题、按题型过滤
-- **做题Session**：顺序/随机做题模式，自动判题
-- **错题本系统**：自动记录错题，支持手动标记/取消
-- **学习统计**：题目错误率、答题准确率、得分统计
-- **数据导入导出**：支持JSON/TXT格式批量导入导出，文件上传导入支持 txt/Word/Markdown（兼容键值格式与通用试卷格式）
-- **AI 智能整理（可选）**：导入文件解析不出题目时，自动调用 LLM 将原文归一化后重新解析（默认关闭，见下文配置）
-- **React 前端**：内置 Web 前端（React + TypeScript + Ant Design），覆盖题库管理、文件导入、做题、错题本、统计全流程
-- **RESTful API**：完整的API文档，支持CORS
+## 下载
 
-## 📋 技术栈
+到 [Releases 页面](https://github.com/fusionwyf/quiz_app/releases) 下载最新安装包（`刷题助手_x.x.x_x64.exe`），双击安装即可。
 
-- **后端框架**：FastAPI (Python 3.8+)
-- **数据库**：SQLite + SQLModel (ORM)
-- **数据验证**：Pydantic v2
-- **API文档**：自动生成 OpenAPI 文档 (`/docs`)
-- **项目管理**：uv (快速依赖管理)
+**首次运行提示**：软件没有购买代码签名证书，Windows SmartScreen 可能弹出「Windows 已保护你的电脑」。点击「更多信息」→「仍要运行」即可。若不放心，可校验 Release 附带的安装包签名文件（`.sig`）。
 
-## 🏃 快速开始
+已安装用户无需重新下载：软件启动时自动检查更新，应用内一键升级。
 
-### 1. 安装依赖
-```bash
-uv add fastapi sqlmodel pydantic
+## 功能一览
+
+- **题库管理**：新建题库、一键导入 `txt / md / docx`，重复题目自动去重；JSON / TXT 导出备份
+- **智能导入**：键值格式（`题目：/类型：/选项：/答案：`）与常见试卷格式自动识别；格式混乱可在设置里配置 OpenAI 兼容 API，用 AI 整理后再解析（解析出 0 题时自动兜底）
+- **三种练习**：顺序刷题、随机出题、错题练习（只刷当前错题）
+- **判分**：作答即时判分；填空题忽略大小写、首尾空格与全半角差异
+- **错题本**：答错自动入本（不用手动标记），连对达标自动出本（默认连续答对 2 次，可配置），也可手动标记「已掌握」
+- **统计**：首页总览（最近练习、正确率趋势、待复习错题数、各题库进度），逐题正确率
+- **数据安全**：一键全库备份为单文件、从文件恢复；每日自动备份（保留最近 7 份）
+- **体验**：浅色 / 深色 / 跟随系统主题；首次使用有三步引导和内置示例题库
+
+## 快速上手
+
+1. **建题库**：「题库管理」→ 新建题库 → 导入文件。没有现成文件？首次引导里可一键导入**示例题库**先体验。
+2. **开练**：「开始做题」→ 选题库与方式（顺序 / 随机 / 错题本）。
+3. **复习**：答错的题自动进错题本；侧边栏角标显示待复习数量，进「错题本」针对性重刷。
+
+**题库文件格式**（每题一段，空行分隔）：
+
+```text
+题目：HTTP 的中文全称是超文本____协议。
+类型：填空
+答案：传输|传送
+
+题目：以下哪些属于有效备考习惯？
+类型：多选
+选项：{"A": "错题及时重做", "B": "只看答案不动手", "C": "定期复习错题本"}
+答案：AC
 ```
 
-### 2. 启动API服务器
-```bash
-uv run uvicorn api:app --reload --host 0.0.0.0 --port 8000
-```
+要点：
 
-> 数据库会在服务启动时自动创建（无需手动初始化）。
+- 填空题**每个空一行**；同一个空有多个正确写法时用 `|` 分隔（如 `传输|传送`），任写其一即判对
+- 多空题在「编辑题目」里每行填一个空的答案
+- 选择题答案写选项字母（多选连写如 `AC`）；判断题答案写 `对` / `错`
 
-### 3. 访问API文档
-打开浏览器访问：http://localhost:8000/docs
+## 反馈与问题排查
 
-## 🖥️ 前端（React + Vite + TypeScript + Ant Design）
+遇到问题请到 [GitHub Issues](https://github.com/fusionwyf/quiz_app/issues) 提交，并附上**诊断包**：「系统设置 → 诊断 → 导出诊断包」，把生成的 zip 一起上传（包含运行日志与版本信息，不含题目内容）。
 
-前端位于 `frontend/` 目录，与后端平级，功能覆盖：题库管理（创建/导入/导出）、题目 CRUD、顺序/随机做题（自动判题）、错题本、答题记录与题目统计。
+日志与数据均在本机应用数据目录（`%APPDATA%\quiz-app\`），可随时查看或删除。
 
-### 启动前端
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## 数据与隐私
 
-打开浏览器访问：http://localhost:5173 （需后端已在 8000 端口运行；5173 已包含在后端 CORS 白名单中）
-
-### 前端目录结构
-```
-frontend/
-├── src/
-│   ├── api/                # API 封装层（types / client / index）
-│   ├── components/         # 共享组件（题目卡片/导入弹窗/题目表单）
-│   ├── pages/              # 页面（题库/题目/做题/错题本/记录）
-│   ├── layouts/            # 侧边菜单布局
-│   ├── App.tsx             # 路由定义
-│   └── main.tsx
-├── vite.config.ts          # 固定 5173 端口
-└── .env                    # VITE_API_BASE=http://localhost:8000
-```
-
-### 生产构建
-```bash
-cd frontend
-npm run build   # 产物输出到 frontend/dist
-```
-
-## 🤖 AI 智能整理（可选）
-
-导入题库文件时，若现有解析器识别不出任何题目，后端会自动调用 LLM 将原文整理成标准键值格式（`题目：/类型：/选项：JSON/答案：JSON`）后重新解析。默认关闭，通过环境变量启用；启用后导入接口响应会新增 `ai_normalized` 字段标记是否经过 AI 整理，前端导入弹窗也会展示启用状态。
-
-**方式一：Ollama 或其他 OpenAI 兼容端点（推荐，零新增依赖）**
-
-```bash
-# 以 Ollama 为例：先安装 Ollama 并拉取一个小模型
-ollama pull qwen2.5:3b
-
-# 启动后端时配置环境变量
-LLM_PROVIDER=openai uv run uvicorn api:app --reload --port 8000
-```
-
-`LLM_BASE_URL` 默认指向 `http://localhost:11434/v1`（Ollama 的 OpenAI 兼容地址），也可改成任意第三方 OpenAI 协议 API、llama.cpp server 或 LM Studio 的端点；`LLM_MODEL` 默认 `qwen2.5:3b`，`LLM_API_KEY` 可选。
-
-**方式二：llama-cpp-python 内嵌 GGUF 模型（进程内运行，无外部程序依赖）**
-
-```bash
-uv sync --extra llm        # 安装 llama-cpp-python
-
-LLM_PROVIDER=local LOCAL_LLM_MODEL_PATH=/path/to/model.gguf uv run uvicorn api:app --reload --port 8000
-```
-
-模型文件首次调用时才加载（懒加载）。此模式便于未来 Tauri 打包：Python 后端作为 sidecar + GGUF 模型文件随包分发。
-
-注意事项：
-- LLM 调用仅在解析结果为 0 题时触发，正常导入路径零开销；单次调用超时 120 秒
-- 送入模型的文本超过约 8000 字符会截断（小模型上下文有限）
-- LLM 输出仍会走现有解析器验证，整理失败自动回退原结果，不会产生脏数据
-- 可用 `GET /llm/status` 查看当前配置状态
-
-## 📚 API文档
-
-详细API文档请查看 [API.md](./API.md)，包含：
-- 所有已实现接口的详细说明
-- 请求/响应示例
-- 错误代码说明
-- 数据模型定义
-
-### 主要接口概览
-
-| 功能模块 | 主要接口 | 说明 |
-|---------|---------|------|
-| 题库管理 | `GET /banks`, `POST /banks/create` | 题库的查看与创建 |
-| 题目管理 | `POST /questions`, `GET /questions/{id}`, `PUT /questions/{id}`, `DELETE /questions/{id}` | 完整的题目CRUD |
-| 随机出题 | `GET /quiz/random` | 从题库随机抽题 |
-| 做题Session | `POST /session/start`, `GET /session/{id}/current`, `POST /session/{id}/answer` | 顺序/随机做题，自动判题 |
-| Session增强 | `GET /session/{id}/status`, `POST /session/{id}/finish` | 进度统计、手动结束 |
-| 错题本 | 错题本 | `GET /mistakes`, `DELETE /mistakes/{id}`, `GET/PUT /mistakes/master-threshold` | 答错自动入本；已掌握移出；连对出本阈值 |
-| 数据导入导出 | `POST /banks/{id}/import`, `POST /banks/{id}/import/file`, `GET /banks/{id}/export` | JSON/TXT字符串导入、txt/md/docx文件上传导入、JSON/TXT导出 |
-| 统计报表 | `GET /records`, `GET /stats/questions/{id}` | 答题记录、题目统计 |
-
-## 🗄️ 数据模型
-
-系统包含以下核心数据模型：
-
-- **QuestionBank**：题库，包含题目集合
-- **Question**：题目，支持单选、多选、判断、填空四种题型
-- **QuizSession**：做题会话，记录做题进度
-- **ExamRecord**：答题记录，保存每次作答结果
-- **Mistake**：错题本，记录需要重点练习的题目
-
-## 🔧 开发指南
-
-### 项目结构
-```
-quiz_app_uv/
-├── api/
-│   ├── api.py          # FastAPI应用和所有接口
-│   ├── models.py       # 数据模型和数据库配置
-│   ├── parsers.py      # 题库文件解析（txt/md/docx，键值+试卷双格式）
-│   └── llm.py          # LLM 智能整理（可选，解析失败自动兜底）
-├── backend_main.py     # PyInstaller 打包入口（--host/--port）
-├── quiz-backend.spec   # PyInstaller 配置（含 uvicorn 隐藏导入）
-├── build-desktop.bat   # 一键构建桌面安装包
-├── tests/              # 后端单元测试
-├── frontend/           # React 前端 + Tauri 桌面壳（见上文）
-│   └── src-tauri/      # Tauri 工程（sidecar 管理、NSIS 打包）
-├── API.md              # 详细API文档
-├── README.md           # 项目说明
-└── pyproject.toml      # 项目配置
-```
-
-### 添加新功能
-1. 在 `models.py` 中添加数据模型（如果需要）
-2. 在 `api.py` 中添加新的路由处理函数
-3. 更新 `API.md` 文档
-4. 测试接口功能
-
-### 运行测试
-```bash
-# 安装测试依赖（使用可选依赖）
-uv add --optional test
-
-# 或者单独安装
-# uv add pytest httpx
-
-# 运行所有测试
-uv run pytest
-
-# 运行特定测试文件
-uv run pytest tests/test_api.py -v
-
-# 运行特定测试函数
-uv run pytest tests/test_api.py::test_create_question -v
-
-# 生成测试覆盖率报告（需要安装pytest-cov）
-# uv add pytest-cov
-# uv run pytest --cov=api --cov=models --cov-report=html
-```
-
-## 📊 示例使用场景
-
-### 1. 创建题库和题目
-```bash
-# 创建题库
-curl -X POST "http://localhost:8000/banks/create?name=数学题库"
-
-# 添加题目
-curl -X POST "http://localhost:8000/questions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bank_id": 1,
-    "type": "single",
-    "content": "1+1=?",
-    "options": {"A": "1", "B": "2", "C": "3", "D": "4"},
-    "answer": ["B"],
-    "score": 1.0
-  }'
-```
-
-### 2. 开始做题
-```bash
-# 开始Session
-curl -X POST "http://localhost:8000/session/start?bank_id=1&mode=sequential"
-
-# 获取当前题目
-curl -X GET "http://localhost:8000/session/1/current"
-
-# 提交答案
-curl -X POST "http://localhost:8000/session/1/answer" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question_id": 1,
-    "user_choices": ["B"]
-  }'
-```
-
-### 3. 查看统计
-```bash
-# 查看Session进度
-curl -X GET "http://localhost:8000/session/1/status"
-
-# 查看题目统计
-curl -X GET "http://localhost:8000/stats/questions/1"
-```
-
-## 🖥️ 桌面应用打包（Tauri）
-
-桌面端 = React 前端（Tauri WebView）+ PyInstaller 冻结的 Python 后端（sidecar 进程）。Tauri 壳负责：选空闲端口拉起后端、健康检查通过后再显示窗口、退出时杀掉后端进程、单实例锁。数据存放在 `%APPDATA%/quiz-app/database.db`。
-
-```bash
-# 一键构建（Windows）
-build-desktop.bat
-# 产物：frontend/src-tauri/target/release/bundle/nsis/quiz-app_0.1.0_x64-setup.exe
-
-# 分步执行
-uv run pyinstaller quiz-backend.spec --noconfirm          # 1. 冻结后端 -> dist/quiz-backend.exe
-copy dist\quiz-backend.exe frontend\src-tauri\binaries\quiz-backend-x86_64-pc-windows-msvc.exe   # 2. 复制为 sidecar（必须带目标三元组后缀）
-cd frontend && npm run tauri build                        # 3. Tauri 打包
-
-# 桌面开发模式（同样需要先完成 1、2）
-cd frontend && npm run tauri dev
-```
-
-要求：Rust 工具链（rustup + MSVC）、Node 18+。改了后端代码后需要重新执行第 1、2 步再打包。
-
-## 🚢 部署
-
-### 生产环境部署
-```bash
-# 使用Gunicorn运行（Linux/macOS）
-uv run gunicorn api:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
-
-# 桌面端为主要分发形态（build-desktop.bat）；容器化部署暂未提供 Dockerfile
-```
-
-### 环境变量配置
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| `CORS_ORIGINS` | `http://localhost:5173,http://tauri.localhost,tauri://localhost` | 允许的CORS来源（逗号分隔） |
-| `LLM_PROVIDER` | `none`（关闭） | `openai`（OpenAI 兼容端点）或 `local`（内嵌 GGUF），详见上文 AI 智能整理 |
-
-> 数据库固定存放在用户数据目录（Windows: `%APPDATA%/quiz-app/database.db`），不再随工作目录变化。
-
-## 🤝 贡献指南
-
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 创建 Pull Request
-
-## 📄 许可证
-
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
-
-## 📞 支持与反馈
-
-如有问题或建议，请提交 Issue 或联系维护者。
+- 所有数据（题库、错题、记录、设置）只存于本机 SQLite 数据库
+- AI 智能整理为可选功能：不配置则完全不联网；配置后仅在你导入文件时调用你自己填写的 API
+- 备份文件不含 AI 整理的 API Key
 
 ---
 
-**Happy Coding!** 🎯
+## 开发者指南
+
+技术栈：FastAPI + SQLModel（`api/`）· React + TypeScript + AntD 5（`frontend/`）· Tauri 2 + PyInstaller sidecar 桌面打包 · SQLite。
+
+```bash
+uv run uvicorn api:app --reload --port 8000   # 后端
+cd frontend && npm install && npm run dev      # 前端（5173）
+uv run pytest                                  # 后端测试
+build-desktop.bat                              # 桌面安装包（NSIS）
+```
+
+- 详细接口文档见 [API.md](./API.md)；领域词汇表见 [CONTEXT.md](./CONTEXT.md)；关键架构决策见 [docs/adr/](./docs/adr/)
+- schema 变更必须走 `api/migrations.py` 迁移链（ADR-0003）；已随安装包发布的迁移不可修改
+- 提交信息用中文 conventional 风格；CI（GitHub Actions）跑后端 pytest + 前端 tsc/build
+- 更新日志见 [CHANGELOG.md](./CHANGELOG.md)
+
+## License
+
+[MIT](./LICENSE)

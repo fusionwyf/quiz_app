@@ -5,6 +5,7 @@ import { ConfigProvider, theme as antdTheme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { useQuery } from '@tanstack/react-query';
 import AppLayout from './layouts/AppLayout';
+import DashboardPage from './pages/DashboardPage';
 import BanksPage from './pages/BanksPage';
 import QuestionsPage from './pages/QuestionsPage';
 import QuizStartPage from './pages/QuizStartPage';
@@ -48,7 +49,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>
-            <Route path="/" element={<BanksPage />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/banks" element={<BanksPage />} />
             <Route path="/banks/:bankId/questions" element={<QuestionsPage />} />
             <Route path="/quiz/start" element={<QuizStartPage />} />
             <Route path="/quiz/session/:sessionId" element={<QuizPlayPage />} />

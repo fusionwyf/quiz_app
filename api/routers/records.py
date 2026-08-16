@@ -7,6 +7,7 @@ from sqlmodel import Session, select, func
 
 from api.deps import get_session
 from api.models import Question, ExamRecord
+from api.services import stats as stats_service
 
 router = APIRouter()
 
@@ -103,6 +104,12 @@ def get_records(
         page_size=page_size,
         records=records_list,
     )
+
+
+@router.get("/stats/overview")
+def get_overview(session_db: Session = Depends(get_session)):
+    """首页总览：总量、正确率、待复习错题、近 14 天趋势、最近练习、各题库进度"""
+    return stats_service.get_overview(session_db)
 
 
 @router.get("/stats/questions/{question_id}", response_model=QuestionStats)

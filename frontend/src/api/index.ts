@@ -290,6 +290,42 @@ export async function setMasterThreshold(value: number): Promise<number> {
   return data.threshold;
 }
 
+// ===== 统计 =====
+
+export interface StatsOverview {
+  total_banks: number;
+  total_questions: number;
+  total_attempts: number;
+  accuracy: number;
+  pending_mistakes: number;
+  trend: { date: string; attempts: number; correct: number }[];
+  recent_sessions: {
+    session_id: number;
+    bank_name: string;
+    mode: string;
+    answered: number;
+    total: number;
+    correct: number;
+    accuracy: number;
+    finished: boolean;
+    created_at: string;
+  }[];
+  bank_progress: {
+    bank_id: number;
+    bank_name: string;
+    question_count: number;
+    answered_questions: number;
+    progress: number;
+    accuracy: number;
+  }[];
+}
+
+/** 首页总览（GET /stats/overview） */
+export async function getStatsOverview(): Promise<StatsOverview> {
+  const { data } = await client.get<StatsOverview>('/stats/overview');
+  return data;
+}
+
 // ===== 备份/恢复 =====
 
 /** 全库备份 payload（直接落盘为文件） */

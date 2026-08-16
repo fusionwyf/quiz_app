@@ -4,6 +4,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Badge, Layout, Menu, theme } from 'antd';
 import {
   BookOutlined,
+  DashboardOutlined,
   DatabaseOutlined,
   EditOutlined,
   FileTextOutlined,
@@ -21,7 +22,8 @@ export default function AppLayout() {
   const { token } = theme.useToken();
 
   const menuItems = [
-    { key: '/', icon: <DatabaseOutlined />, label: '题库管理' },
+    { key: '/', icon: <DashboardOutlined />, label: '总览' },
+    { key: '/banks', icon: <DatabaseOutlined />, label: '题库管理' },
     { key: '/quiz/start', icon: <EditOutlined />, label: '开始做题' },
     {
       key: '/mistakes',

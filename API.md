@@ -243,6 +243,11 @@
     - `is_correct?: bool`（按正确性过滤）
   - 返回：分页的答题记录，包含题目内容和类型
 
+- **首页总览**
+  - 方法：GET
+  - 路径：`/stats/overview`
+  - 返回：`{total_banks, total_questions, total_attempts, accuracy, pending_mistakes, trend: [{date, attempts, correct}]（近 14 天，空日补零）, recent_sessions: [{session_id, bank_name, mode(中文标签), answered, total, correct, accuracy, finished, created_at}], bank_progress: [{bank_id, bank_name, question_count, answered_questions, progress, accuracy}]}`
+
 - **获取题目统计**
   - 方法：GET
   - 路径：`/stats/questions/{question_id}`

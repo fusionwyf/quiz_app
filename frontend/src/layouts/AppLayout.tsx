@@ -1,7 +1,7 @@
 // 侧边菜单布局
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Badge, Layout, Menu } from 'antd';
+import { Badge, Layout, Menu, theme } from 'antd';
 import {
   BookOutlined,
   DatabaseOutlined,
@@ -18,6 +18,7 @@ export default function AppLayout() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const mistakeCount = useMistakeCount();
+  const { token } = theme.useToken();
 
   const menuItems = [
     { key: '/', icon: <DatabaseOutlined />, label: '题库管理' },
@@ -72,11 +73,11 @@ export default function AppLayout() {
       <Layout>
         <Header
           style={{
-            background: '#fff',
+            background: token.colorBgContainer,
             padding: '0 24px',
             fontSize: 16,
             fontWeight: 500,
-            borderBottom: '1px solid #f0f0f0',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
           刷题助手

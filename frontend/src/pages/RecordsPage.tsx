@@ -11,6 +11,7 @@ import {
   Typography,
   Col,
   Row,
+  theme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { BarChartOutlined, ReloadOutlined } from '@ant-design/icons';
@@ -29,6 +30,7 @@ const { Title, Paragraph } = Typography;
 type CorrectFilter = 'all' | 'correct' | 'wrong';
 
 export default function RecordsPage() {
+  const { token } = theme.useToken();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [filter, setFilter] = useState<CorrectFilter>('all');
@@ -187,7 +189,10 @@ export default function RecordsPage() {
                   precision={1}
                   suffix="%"
                   valueStyle={{
-                    color: stats.correct_rate >= 60 ? '#3f8600' : '#cf1322',
+                    color:
+                      stats.correct_rate >= 60
+                        ? token.colorSuccess
+                        : token.colorError,
                   }}
                 />
               </Col>

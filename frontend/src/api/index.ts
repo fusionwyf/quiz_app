@@ -97,6 +97,22 @@ export function exportUrl(bankId: number, format: 'json' | 'txt'): string {
   return `${API_BASE}/banks/${bankId}/export?format=${format}`;
 }
 
+// ===== 外观设置 =====
+
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+export async function getThemeSetting(): Promise<ThemeMode> {
+  const { data } = await client.get<{ theme: ThemeMode }>('/settings/theme');
+  return data.theme;
+}
+
+export async function setThemeSetting(value: ThemeMode): Promise<ThemeMode> {
+  const { data } = await client.put<{ theme: ThemeMode }>('/settings/theme', {
+    value,
+  });
+  return data.theme;
+}
+
 // ===== 诊断 =====
 
 export interface DiagnosticsInfo {

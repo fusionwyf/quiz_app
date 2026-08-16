@@ -1,15 +1,28 @@
-// 系统设置页：数据备份 + 诊断 + 错题连对出本阈值 + LLM 智能整理 API 配置
+// 系统设置页：外观 + 诊断 + 数据备份 + 错题连对出本阈值 + LLM 智能整理 API 配置
 import { Card, Typography } from 'antd';
+import { useQuery } from '@tanstack/react-query';
 import BackupCard from '../components/BackupCard';
 import DiagnosticsCard from '../components/DiagnosticsCard';
 import LlmSettingsForm from '../components/LlmSettingsForm';
 import MistakeThresholdForm from '../components/MistakeThresholdForm';
+import ThemeForm from '../components/ThemeForm';
+import { getThemeSetting } from '../api';
+import { queryKeys } from '../api/queries';
 
 const { Paragraph } = Typography;
 
 export default function SettingsPage() {
+  const { data: theme = 'system' } = useQuery({
+    queryKey: queryKeys.theme,
+    queryFn: getThemeSetting,
+    staleTime: Infinity,
+  });
+
   return (
     <>
+      <Card title="外观" style={{ maxWidth: 680, marginBottom: 16 }}>
+        <ThemeForm current={theme} />
+      </Card>
       <Card title="诊断" style={{ maxWidth: 680, marginBottom: 16 }}>
         <Paragraph type="secondary">
           后端与桌面壳的运行日志保存在本机应用数据目录（滚动清理）。

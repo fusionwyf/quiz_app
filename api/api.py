@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.deps import get_session  # noqa: F401 —— re-export 保持既有导入点稳定
 from api.migrations import run_migrations
 from api.models import engine
-from api.routers import banks, questions, sessions, mistakes, records, llm_config, backup, diagnostics
+from api.routers import banks, questions, sessions, mistakes, records, llm_config, backup, diagnostics, settings
 from api.services import backup as backup_service
 from api.services import diagnostics as diagnostics_service
 from sqlmodel import Session
@@ -63,3 +63,4 @@ app.include_router(records.router)
 app.include_router(llm_config.router)
 app.include_router(backup.router)
 app.include_router(diagnostics.router)
+app.include_router(settings.router)

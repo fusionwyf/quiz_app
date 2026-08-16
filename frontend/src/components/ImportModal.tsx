@@ -16,6 +16,7 @@ import {
 } from 'antd';
 import { InboxOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd';
+import { theme } from 'antd';
 import { getLlmStatus, importQuestionsFile } from '../api';
 import { queryKeys } from '../api/queries';
 import type { ImportResult } from '../api/types';
@@ -41,6 +42,7 @@ export default function ImportModal({
   onClose,
 }: ImportModalProps) {
   const qc = useQueryClient();
+  const { token } = theme.useToken();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [forceLlm, setForceLlm] = useState(false);
@@ -174,7 +176,7 @@ export default function ImportModal({
               title="跳过"
               value={result.skipped_count}
               valueStyle={
-                result.skipped_count > 0 ? { color: '#faad14' } : undefined
+                result.skipped_count > 0 ? { color: token.colorWarning } : undefined
               }
             />
           </Space>

@@ -17,6 +17,8 @@ import type {
   QuestionDTO,
   QuestionListResult,
   QuestionStats,
+  AutoBackupItem,
+  RestoreResult,
   QuizSession,
   SessionStatus,
   SessionSummary,
@@ -240,6 +242,36 @@ export async function setMasterThreshold(value: number): Promise<number> {
     { value },
   );
   return data.threshold;
+}
+
+// ===== 备份/恢复 =====
+
+/** 全库备份 payload（直接落盘为文件） */
+export async function createBackup(): Promise<Record<string, unknown>> {
+  const { data } = await client.post('/backup');
+  return data;
+}
+
+export async function listAutoBackups(): Promise<AutoBackupItem[]> {
+  const { data } = await client.get<{ backups: AutoBackupItem[] }>(
+    '/backup/list',
+  );
+  return data.backups;
+}
+
+/** 从上传的备份 JSON 恢复（覆盖现有全部数据，调用前必须用户确认） */
+export async function restoreBackup(
+  payload: Record<string, unknown>,
+): Promise<RestoreResult> {
+  const { data } = await client.post('/backup/restore', payload);
+  return data;
+}
+
+export async function restoreAutoBackup(
+  filename: string,
+): Promise<RestoreResult> {
+  const { data } = await client.post(`/backup/restore/auto/${filename}`);
+  return data;
 }
 
 // ===== 答题记录与统计 =====

@@ -8,14 +8,22 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.deps import get_session  # noqa: F401 —— re-export 保持既有导入点稳定
 from api.migrations import run_migrations
-from api.models import engine, create_db_and_tables
-from api.routers import banks, questions, sessions, mistakes, records, llm_config
+from api.models import engine
+from api.routers import banks, questions, sessions, mistakes, records, llm_config, backup
+from api.services import backup as backup_service
+from sqlmodel import Session
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 建表（全新库）+ 迁移链升级（旧库）——见 ADR-0003
     run_migrations(engine)
+    # 每日首次启动自动备份（保留最近 7 份，失败不阻断启动）
+    with Session(engine) as session:
+        try:
+            backup_service.maybe_daily_backup(session)
+        except Exception:
+            pass
     yield
 
 
@@ -49,3 +57,4 @@ app.include_router(sessions.router)
 app.include_router(mistakes.router)
 app.include_router(records.router)
 app.include_router(llm_config.router)
+app.include_router(backup.router)

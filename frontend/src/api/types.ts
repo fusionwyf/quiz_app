@@ -185,6 +185,19 @@ export interface MistakeItem {
   bank_id: number;
 }
 
+// ===== 备份 =====
+
+export interface AutoBackupItem {
+  filename: string;
+  date: string;
+  size_bytes: number;
+}
+
+export interface RestoreResult {
+  message: string;
+  restored: Record<string, number>;
+}
+
 // ===== 答题记录与统计 =====
 
 export interface ExamRecordItem {

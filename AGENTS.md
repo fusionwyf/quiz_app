@@ -26,7 +26,7 @@ Windows 环境：shell 为 cmd，`ls`/`tail` 不可用，用 `dir`、`findstr`�
 
 - `api/api.py` — 应用组装层（FastAPI 实例、CORS、lifespan、路由挂载）；`conftest.py` 与 `backend_main.py` 依赖 `from api.api import app, get_session`，勿破坏这两个导入点
 - `api/routers/` — 按域拆分的路由（banks / questions / sessions / mistakes / records / llm_config），路由只做参数校验与编排
-- `api/services/` — 业务规则（grading 判分、banks 级联删除）；新业务逻辑落这里，不进路由
+- `api/services/` — 业务规则（grading 判分、mistakes 错题入本/出本、banks 级联删除、backup 备份/恢复）；新业务逻辑落这里，不进路由
 - `api/deps.py` — `get_session` 依赖；`api/constants.py` — 题目类型等常量；`api/schemas.py` — 跨路由共享 DTO
 - `api/migrations.py` — 数据库迁移链（`PRAGMA user_version`，ADR-0003）：改 schema 必须"改模型 + 链尾追加步骤 + SCHEMA_VERSION 递增"，已发布步骤不可修改
 - `api/models.py` — SQLModel 数据模型与数据库配置

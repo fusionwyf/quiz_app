@@ -288,6 +288,34 @@
 
 ---
 
+### 14) 备份与恢复
+备份为单文件 JSON（`format=quiz-helper-backup`，含结构版本号；题库、题目、错题含连对计数、答题记录、应用设置；**LLM API Key 不随备份带走**，恢复后保留本机已存 Key；练习会话为临时状态不入备份）。
+
+- **生成备份**
+  - 方法：POST
+  - 路径：`/backup`
+  - 返回：备份 payload（前端转存为 `.json` 文件下载）
+
+- **自动备份列表**
+  - 方法：GET
+  - 路径：`/backup/list`
+  - 返回：`{"backups": [{"filename", "date", "size_bytes"}]}`（每日首次启动自动生成，滚动保留最近 7 份，位于应用数据目录 `backups/` 下）
+
+- **从上传的备份恢复**
+  - 方法：POST
+  - 路径：`/backup/restore`
+  - 请求体：备份 JSON 原文
+  - 返回：`{"message", "restored": {banks|questions|mistakes|records|settings: 数量}}`
+  - 错误：格式不正确 400
+  - 说明：**覆盖现有全部数据**，前端必须先做用户确认；旧版本备份缺新字段（如连对计数）按默认值恢复
+
+- **从自动备份恢复**
+  - 方法：POST
+  - 路径：`/backup/restore/auto/{filename}`
+  - 返回/错误：同上；文件名非法（仅允许 `auto-YYYYMMDD.json`）或不存在 400
+
+---
+
 ## 判题逻辑说明
 - `check_answer` 支持：
   - 单选/多选/判断：集合不分顺序匹配（选项字母统一大写后比较）

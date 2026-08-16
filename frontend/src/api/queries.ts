@@ -11,6 +11,7 @@ export const queryKeys = {
   records: (params: { page: number; page_size: number; is_correct?: boolean }) =>
     ['records', params] as const,
   llmStatus: ['llm-status'] as const,
+  autoBackups: ['auto-backups'] as const,
 };
 
 /** 题库列表（多处共用：题库页、做题入口、错题筛选） */

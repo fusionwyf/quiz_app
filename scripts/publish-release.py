@@ -81,10 +81,12 @@ def main():
     )
     run(["npx", "tauri", "build"], cwd=FRONTEND, env=env)
 
-    # 3) 收集 NSIS 安装包与签名
+    # 3) 收集 NSIS 安装包与签名（按 productName+version 精确命名，避免匹配到改名前的旧产物）
     nsis_dir = SRC_TAURI / "target" / "release" / "bundle" / "nsis"
-    exe = next(p for p in nsis_dir.glob("*-setup.exe"))
-    sig = exe.with_suffix(".sig")
+    exe = nsis_dir / f"{product}_{version}_x64-setup.exe"
+    sig = nsis_dir / f"{exe.name}.sig"  # 签名文件是 xxx-setup.exe.sig
+    if not exe.exists():
+        raise SystemExit(f"未找到安装包：{exe}")
     if not sig.exists():
         raise SystemExit(f"未找到更新签名文件：{sig}（检查 createUpdaterArtifacts 配置）")
     print(f"安装包：{exe.name}（{exe.stat().st_size / 1024 / 1024:.1f} MB）")

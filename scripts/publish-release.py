@@ -74,6 +74,7 @@ def main():
 
     # 2) tauri build（签名密钥经环境变量传入，绝不写入仓库；空密码也要显式给，避免交互挂起）
     env = os.environ.copy()
+    env["TAURI_SIGNING_PRIVATE_KEY"] = KEY_PATH.read_text(encoding="utf-8").strip()
     env["TAURI_SIGNING_PRIVATE_KEY_PATH"] = str(KEY_PATH)
     env["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = os.environ.get(
         "TAURI_SIGNING_PRIVATE_KEY_PASSWORD", ""
